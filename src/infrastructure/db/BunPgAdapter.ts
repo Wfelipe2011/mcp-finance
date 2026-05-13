@@ -5,6 +5,7 @@ import type { TransactionRepository } from "../../domain/ports/repositories/Tran
 import type { InvestmentRepository } from "../../domain/ports/repositories/InvestmentRepository.ts";
 import type { InvestmentTransactionRepository } from "../../domain/ports/repositories/InvestmentTransactionRepository.ts";
 import type { IdentityRepository } from "../../domain/ports/repositories/IdentityRepository.ts";
+import type { EnrichTransactionsRepository } from "../../domain/ports/repositories/EnrichTransactionsRepository.ts";
 import type { Item } from "../../domain/entities/Item.ts";
 import type { Account } from "../../domain/entities/Account.ts";
 import type { Transaction } from "../../domain/entities/Transaction.ts";
@@ -21,6 +22,7 @@ export class BunPgAdapter {
   readonly investments: InvestmentRepository;
   readonly investmentTransactions: InvestmentTransactionRepository;
   readonly identities: IdentityRepository;
+  readonly enrichTransactions: EnrichTransactionsRepository;
 
   constructor() {
     const url = process.env["DATABASE_URL"];
@@ -256,6 +258,126 @@ export class BunPgAdapter {
                 synced_at                      = EXCLUDED.synced_at
             `;
           }
+        });
+      },
+    };
+
+    // ── enrichTransactions ────────────────────────────────────────────────────
+    this.enrichTransactions = {
+      async enrich(): Promise<void> {
+        await sql.begin(async (tx) => {
+          await tx`TRUNCATE transactions_enriched`;
+          await tx`
+            INSERT INTO transactions_enriched
+            WITH kind AS (
+              SELECT
+                t.id,
+                CASE
+                  WHEN t.operation_type IN ('RESGATE_APLIC_FINANCEIRA', 'RENDIMENTO_APLIC_FINANCEIRA')
+                    THEN 'INVEST'
+                  WHEN t.type = 'CREDIT'
+                    AND t.payment_data IS NOT NULL AND t.payment_data != ''
+                    AND (t.payment_data::jsonb->'payer'->>'accountNumber')
+                        IN (SELECT DISTINCT number FROM accounts WHERE number IS NOT NULL)
+                    THEN 'TRANSFER'
+                  WHEN t.type = 'DEBIT'
+                    AND t.payment_data IS NOT NULL AND t.payment_data != ''
+                    AND (t.payment_data::jsonb->'receiver'->>'accountNumber')
+                        IN (SELECT DISTINCT number FROM accounts WHERE number IS NOT NULL)
+                    THEN 'TRANSFER'
+                  WHEN t.type = 'DEBIT'
+                    AND t.account_id IN (SELECT id FROM accounts WHERE type = 'BANK')
+                    AND (t.description ILIKE '%pagamento de fatura%' OR t.description ILIKE '%gastos cartao%')
+                    THEN 'TRANSFER'
+                  WHEN t.type = 'CREDIT'
+                    AND t.account_id IN (SELECT id FROM accounts WHERE type = 'CREDIT')
+                    AND (t.description ILIKE '%pagamento%fatura%' OR t.description ILIKE '%inclusao pgto%')
+                    THEN 'TRANSFER'
+                  WHEN t.type = 'DEBIT' THEN 'EXPENSE'
+                  ELSE 'INCOME'
+                END AS transaction_kind
+              FROM transactions t
+            )
+            SELECT
+              t.id,
+              t.account_id,
+              t.description,
+              t.description_raw,
+              'BRL' AS currency_code,
+              COALESCE(
+                CASE WHEN t.currency_code != 'BRL' THEN t.amount_in_account_currency ELSE NULL END,
+                t.amount
+              ) AS amount,
+              t.date,
+              t.category,
+              t.category_id,
+              t.status,
+              t.type,
+              t.operation_type,
+              t.cc_bill_id,
+              t.cc_purchase_date,
+              t.cc_total_installments,
+              t.cc_installment_number,
+              t.cc_payee_mcc,
+              k.transaction_kind,
+              (
+                SELECT peer.id
+                FROM accounts peer
+                WHERE (
+                  (t.type = 'CREDIT' AND peer.number = (t.payment_data::jsonb->'payer'->>'accountNumber'))
+                  OR
+                  (t.type = 'DEBIT' AND peer.number = (t.payment_data::jsonb->'receiver'->>'accountNumber'))
+                )
+                ORDER BY
+                  CASE peer.subtype WHEN 'CHECKING_ACCOUNT' THEN 0 ELSE 1 END,
+                  peer.id
+                LIMIT 1
+              ) AS peer_account_id,
+              k.transaction_kind IN ('EXPENSE', 'INCOME') AS is_real_cashflow,
+              LOWER(TRIM(a.owner)) AS owner_normalized,
+              cl.name_pt AS category_pt,
+              LEFT(t.category_id, 2) AS category_group,
+              cg.name_pt AS category_group_pt
+            FROM transactions t
+            JOIN kind k ON k.id = t.id
+            JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN category_labels cl ON cl.category_id = t.category_id
+            LEFT JOIN category_groups cg ON cg.group_id = LEFT(t.category_id, 2)
+          `;
+          // apply category overrides (ILIKE pattern matching, lowest priority wins)
+          await tx`
+            UPDATE transactions_enriched te
+            SET
+              category_id       = co.category_id_override,
+              category_pt       = cl.name_pt,
+              category_group    = LEFT(co.category_id_override, 2),
+              category_group_pt = cg.name_pt
+            FROM (
+              SELECT DISTINCT ON (tx.id)
+                tx.id        AS tx_id,
+                co.id        AS override_id,
+                co.category_id_override
+              FROM transactions_enriched tx
+              JOIN category_overrides co ON tx.description ILIKE co.pattern
+              ORDER BY tx.id, co.priority ASC
+            ) best
+            JOIN category_overrides co ON co.id = best.override_id
+            JOIN category_labels cl ON cl.category_id = co.category_id_override
+            JOIN category_groups cg ON cg.group_id = LEFT(co.category_id_override, 2)
+            WHERE te.id = best.tx_id
+          `;
+          // increment match_count for each override rule that matched at least one transaction
+          await tx`
+            UPDATE category_overrides co
+            SET match_count = match_count + matched.cnt
+            FROM (
+              SELECT co2.id, COUNT(*) AS cnt
+              FROM transactions_enriched te
+              JOIN category_overrides co2 ON te.description ILIKE co2.pattern
+              GROUP BY co2.id
+            ) matched
+            WHERE co.id = matched.id
+          `;
         });
       },
     };

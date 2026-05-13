@@ -217,3 +217,199 @@ CREATE TABLE IF NOT EXISTS identities (
   synced_at                    TEXT NOT NULL
 );
 
+-- ────────────────────────────────────────────────
+-- category_groups (grupos pai de categorias — PT-BR)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS category_groups (
+  group_id  TEXT PRIMARY KEY,
+  name_pt   TEXT NOT NULL
+);
+
+-- ────────────────────────────────────────────────
+-- category_labels (categorias Pluggy → PT-BR)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS category_labels (
+  category_id  TEXT PRIMARY KEY,
+  name_pt      TEXT NOT NULL,
+  group_id     TEXT NOT NULL REFERENCES category_groups(group_id)
+);
+
+-- ────────────────────────────────────────────────
+-- category_overrides (regras de recategorização manual por ILIKE)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS category_overrides (
+  id                   SERIAL PRIMARY KEY,
+  pattern              TEXT NOT NULL UNIQUE,
+  category_id_override TEXT NOT NULL REFERENCES category_labels(category_id),
+  note                 TEXT,
+  priority             INTEGER NOT NULL DEFAULT 100,
+  match_count          INTEGER NOT NULL DEFAULT 0,
+  created_at           TEXT NOT NULL DEFAULT (NOW()::TEXT)
+);
+
+-- seed: category_groups
+INSERT INTO category_groups (group_id, name_pt) VALUES
+  ('01', 'Receitas'),
+  ('02', 'Empréstimos e Financiamentos'),
+  ('03', 'Investimentos'),
+  ('04', 'Transferência entre Próprias Contas'),
+  ('05', 'Transferências'),
+  ('06', 'Obrigações Legais'),
+  ('07', 'Serviços'),
+  ('08', 'Compras'),
+  ('09', 'Serviços Digitais'),
+  ('10', 'Mercado e Supermercado'),
+  ('11', 'Alimentação'),
+  ('12', 'Viagem'),
+  ('13', 'Doações'),
+  ('15', 'Impostos'),
+  ('16', 'Tarifas Bancárias'),
+  ('17', 'Moradia'),
+  ('18', 'Saúde'),
+  ('19', 'Transporte'),
+  ('20', 'Seguros')
+ON CONFLICT DO NOTHING;
+
+-- seed: category_labels (74 categorias Pluggy → PT-BR)
+INSERT INTO category_labels (category_id, name_pt, group_id) VALUES
+  -- Receitas
+  ('01010000', 'Salário',                                    '01'),
+  ('01030000', 'Atividades empresariais',                    '01'),
+  ('01040000', 'Auxílio governamental',                      '01'),
+  ('01050000', 'Renda não recorrente',                       '01'),
+  -- Empréstimos e Financiamentos
+  ('02000000', 'Empréstimos e financiamentos',               '02'),
+  ('02010000', 'Multa e juros por atraso',                   '02'),
+  ('02020000', 'Juros cobrados',                             '02'),
+  ('02040000', 'Empréstimos',                                '02'),
+  -- Investimentos
+  ('03000000', 'Investimentos',                              '03'),
+  ('03010000', 'Investimento automático',                    '03'),
+  ('03020000', 'Renda fixa',                                 '03'),
+  ('03060000', 'Rendimentos e dividendos',                   '03'),
+  -- Transferência entre Próprias Contas
+  ('04000000', 'Transferência entre próprias contas',        '04'),
+  ('04010000', 'Transferência entre próprias contas — Saque','04'),
+  -- Transferências
+  ('05000000', 'Transferências',                             '05'),
+  ('05010000', 'Transferência — Boleto',                     '05'),
+  ('05060000', 'Transferência interna',                      '05'),
+  ('05070000', 'Transferência — PIX',                        '05'),
+  ('05080000', 'Transferência — TED',                        '05'),
+  ('05090000', 'Transferências a terceiros',                 '05'),
+  ('05100000', 'Pagamento de fatura',                        '05'),
+  -- Obrigações Legais
+  ('06000000', 'Obrigações legais',                          '06'),
+  -- Serviços
+  ('07000000', 'Serviços',                                   '07'),
+  ('07010000', 'Telecomunicações',                           '07'),
+  ('07010001', 'Internet',                                   '07'),
+  ('07010002', 'Telefone celular',                           '07'),
+  ('07020000', 'Educação',                                   '07'),
+  ('07020001', 'Cursos online',                              '07'),
+  ('07020003', 'Escola',                                     '07'),
+  ('07030000', 'Bem-estar e fitness',                        '07'),
+  ('07030001', 'Academias e centros de fitness',             '07'),
+  ('07030002', 'Prática esportiva',                          '07'),
+  ('07040003', 'Cinema, teatro e shows',                     '07'),
+  -- Compras
+  ('08000000', 'Compras',                                    '08'),
+  ('08010000', 'Compras online',                             '08'),
+  ('08020000', 'Eletrônicos',                                '08'),
+  ('08030000', 'Pet e veterinário',                          '08'),
+  ('08040000', 'Roupas e vestuário',                         '08'),
+  ('08060000', 'Livraria',                                   '08'),
+  ('08070000', 'Artigos esportivos',                         '08'),
+  ('08080000', 'Material de escritório',                     '08'),
+  ('08090000', 'Cashback',                                   '08'),
+  -- Serviços Digitais
+  ('09000000', 'Serviços digitais',                          '09'),
+  ('09020000', 'Streaming de vídeo',                         '09'),
+  -- Mercado e Supermercado
+  ('10000000', 'Mercado e supermercado',                     '10'),
+  -- Alimentação
+  ('11000000', 'Alimentação e bebidas',                      '11'),
+  ('11010000', 'Restaurantes',                               '11'),
+  ('11020000', 'Delivery de comida',                         '11'),
+  -- Viagem
+  ('12000000', 'Viagem',                                     '12'),
+  ('12020000', 'Hospedagem',                                 '12'),
+  -- Doações
+  ('13000000', 'Doações',                                    '13'),
+  -- Impostos
+  ('15000000', 'Impostos',                                   '15'),
+  ('15030000', 'Imposto sobre operações financeiras',        '15'),
+  -- Tarifas Bancárias
+  ('16000000', 'Tarifas bancárias',                          '16'),
+  ('16030000', 'Tarifas de cartão de crédito',               '16'),
+  -- Moradia
+  ('17000000', 'Moradia',                                    '17'),
+  ('17010000', 'Aluguel',                                    '17'),
+  ('17020002', 'Energia elétrica',                           '17'),
+  ('17030000', 'Utensílios domésticos',                      '17'),
+  -- Saúde
+  ('18000000', 'Saúde',                                      '18'),
+  ('18020000', 'Farmácia',                                   '18'),
+  ('18040000', 'Hospitais, clínicas e laboratórios',         '18'),
+  -- Transporte
+  ('19000000', 'Transporte',                                 '19'),
+  ('19010000', 'Táxi e aplicativos',                         '19'),
+  ('19020000', 'Transporte público',                         '19'),
+  ('19030000', 'Aluguel de carro',                           '19'),
+  ('19040000', 'Bicicleta',                                  '19'),
+  ('19050000', 'Automóvel',                                  '19'),
+  ('19050001', 'Postos de combustível',                      '19'),
+  ('19050002', 'Estacionamento',                             '19'),
+  ('19050003', 'Pedágios e pagamentos em veículo',           '19'),
+  ('19050005', 'Manutenção de veículo',                      '19'),
+  -- Seguros
+  ('20000000', 'Seguros',                                    '20'),
+  ('200300000','Plano de saúde',                             '20')
+ON CONFLICT DO NOTHING;
+
+-- seed: category_overrides (regras iniciais de recategorização)
+INSERT INTO category_overrides (pattern, category_id_override, note, priority) VALUES
+  ('%Amazon AWS%',  '09000000', 'Amazon Web Services — incorretamente categorizado como livraria', 10),
+  ('%OpenRouter%',  '09000000', 'OpenRouter.ai — API de LLMs, incorretamente categorizado como eletrônicos', 10),
+  ('%Neon.tech%',   '09000000', 'Neon — banco de dados cloud, incorretamente categorizado', 10)
+ON CONFLICT DO NOTHING;
+
+-- ────────────────────────────────────────────────
+-- transactions_enriched (camada bronze — classificação de natureza)
+-- Repopulada a cada sync via TRUNCATE + INSERT ... SELECT
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS transactions_enriched (
+  -- colunas espelhadas de transactions
+  id                        TEXT PRIMARY KEY,
+  account_id                TEXT NOT NULL REFERENCES accounts(id),
+  description               TEXT,
+  description_raw           TEXT,
+  currency_code             TEXT,          -- sempre 'BRL' (normalizado no enriquecimento)
+  amount                    NUMERIC(18,4), -- sempre em BRL (USD convertido via amount_in_account_currency)
+  date                      TEXT,
+  category                  TEXT,
+  category_id               TEXT,
+  status                    TEXT,
+  type                      TEXT,
+  operation_type            TEXT,
+  cc_bill_id                TEXT,
+  cc_purchase_date          TEXT,
+  cc_total_installments     INTEGER,
+  cc_installment_number     INTEGER,
+  cc_payee_mcc              INTEGER,
+  -- colunas de enriquecimento
+  transaction_kind          TEXT NOT NULL,
+  peer_account_id           TEXT REFERENCES accounts(id),
+  is_real_cashflow          BOOLEAN NOT NULL,
+  owner_normalized          TEXT NOT NULL,
+  -- colunas de categorização PT-BR (via category_labels + category_groups)
+  category_pt               TEXT,
+  category_group            TEXT,
+  category_group_pt         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tx_enriched_account_id_date
+  ON transactions_enriched(account_id, date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tx_enriched_transaction_kind
+  ON transactions_enriched(transaction_kind);

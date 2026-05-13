@@ -6,6 +6,7 @@ import type { TransactionRepository } from "../../domain/ports/repositories/Tran
 import type { InvestmentRepository } from "../../domain/ports/repositories/InvestmentRepository.ts";
 import type { InvestmentTransactionRepository } from "../../domain/ports/repositories/InvestmentTransactionRepository.ts";
 import type { IdentityRepository } from "../../domain/ports/repositories/IdentityRepository.ts";
+import type { EnrichTransactionsRepository } from "../../domain/ports/repositories/EnrichTransactionsRepository.ts";
 import { PluggyHttpAdapter } from "../../infrastructure/pluggy/PluggyHttpAdapter.ts";
 
 export interface SyncDeps {
@@ -16,6 +17,7 @@ export interface SyncDeps {
   investmentRepo: InvestmentRepository;
   investmentTransactionRepo: InvestmentTransactionRepository;
   identityRepo: IdentityRepository;
+  enrichTransactionRepo: EnrichTransactionsRepository;
 }
 
 export interface SyncSummary {
@@ -36,7 +38,8 @@ export class SyncUseCase {
   async run(): Promise<SyncSummary> {
     const start = Date.now();
     const { tokenPort, itemRepo, accountRepo, transactionRepo,
-            investmentRepo, investmentTransactionRepo, identityRepo } = this.deps;
+            investmentRepo, investmentTransactionRepo, identityRepo,
+            enrichTransactionRepo } = this.deps;
 
     // 1. Token
     const token = await tokenPort.getToken();
@@ -80,6 +83,11 @@ export class SyncUseCase {
     const identities = identityResults.filter((id): id is NonNullable<typeof id> => id !== null);
     await identityRepo.upsertMany(identities);
     console.log(`[sync] Identities: ${identities.length}`);
+
+    // 6. Enrich transactions (camada bronze)
+    console.log("[sync] Enriching transactions...");
+    await enrichTransactionRepo.enrich();
+    console.log("[sync] Transactions enriched.");
 
     const elapsed = ((Date.now() - start) / 1000).toFixed(2);
     console.log(`[sync] Done in ${elapsed}s`);
