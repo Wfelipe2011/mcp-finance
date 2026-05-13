@@ -1,0 +1,30 @@
+export type InvestmentTransaction = {
+  id: string;
+  investmentId: string;
+  description: string | null;
+  amount: number | null;
+  value: number | null;
+  quantity: number | null;
+  tradeDate: string | null;
+  date: string | null;
+  type: string | null;
+  netAmount: number | null;
+  movementType: string | null;
+  brokerageNumber: string | null;
+  agreedRate: number | null;
+  // expenses
+  expIncomeTax: number | null;
+  expBrokerageFee: number | null;
+  expServiceTax: number | null;
+  expSettlementFee: number | null;
+  expClearingFee: number | null;
+  expStockExchangeFee: number | null;
+  expCustodyFee: number | null;
+  expOperatingFee: number | null;
+  expTradingAssetsNoticeFee: number | null;
+  expMaintenanceFee: number | null;
+  expOther: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  syncedAt: string;
+};

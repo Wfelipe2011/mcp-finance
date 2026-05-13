@@ -1,0 +1,186 @@
+{
+  "capturedAt": "2026-05-08",
+  "collectionMode": "chrome-devtools-mcp + in-page network instrumentation (fetch/xhr)",
+  "focus": "movimentacao monetaria (conta + investimentos)",
+  "routesVisited": [
+    "/overview",
+    "/cash",
+    "/assets",
+    "/connections"
+  ],
+  "importantBehavior": [
+    "A aba /cash pre-carrega movimentos e aplica filtros (Todos/Entradas/Saidas) no cliente sem novas chamadas de rede.",
+    "A selecao de conexao em /cash tambem foi observada como filtro local (sem novas chamadas HTTP).",
+    "As movimentacoes sao carregadas em fan-out: uma chamada por accountId e uma chamada por investmentId."
+  ],
+  "endpoints": [
+    {
+      "category": "money-movements",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/transactions?accountId={account_uuid}",
+      "observedRoutes": ["/overview", "/cash"],
+      "observedCount": 11,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "responseShape": {
+        "type": "array",
+        "item": {
+          "id": "uuid",
+          "description": "string",
+          "descriptionRaw": "string",
+          "currencyCode": "string",
+          "amount": "number",
+          "date": "datetime",
+          "category": "string",
+          "categoryId": "string",
+          "accountId": "uuid",
+          "status": "string",
+          "paymentData": "object|null",
+          "type": "CREDIT|DEBIT",
+          "operationType": "string|null",
+          "providerId": "string",
+          "createdAt": "datetime",
+          "updatedAt": "datetime"
+        }
+      },
+      "sampleResponseSanitized": [
+        {
+          "id": "{transaction_uuid}",
+          "description": "Transferencia enviada pelo Pix",
+          "currencyCode": "BRL",
+          "amount": -30,
+          "date": "{iso_datetime}",
+          "category": "Transfer - PIX",
+          "accountId": "{account_uuid}",
+          "status": "POSTED",
+          "paymentData": {
+            "paymentMethod": "PIX"
+          },
+          "type": "DEBIT",
+          "operationType": "PIX"
+        }
+      ]
+    },
+    {
+      "category": "money-movements",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments/{investment_uuid}/transactions",
+      "observedRoutes": ["/overview", "/cash", "/assets"],
+      "observedCount": 87,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "responseShape": {
+        "type": "object",
+        "fields": {
+          "total": "number",
+          "totalPages": "number",
+          "page": "number",
+          "results": [
+            {
+              "id": "uuid",
+              "amount": "number",
+              "value": "number",
+              "quantity": "number",
+              "tradeDate": "date",
+              "date": "datetime",
+              "type": "BUY|SELL|...",
+              "netAmount": "number",
+              "movementType": "CREDIT|DEBIT",
+              "expenses": "object|null"
+            }
+          ]
+        }
+      },
+      "sampleResponseSanitized": {
+        "total": 1,
+        "totalPages": 1,
+        "page": 1,
+        "results": [
+          {
+            "id": "{investment_tx_uuid}",
+            "amount": 10.95,
+            "value": 0.0101,
+            "quantity": 1083,
+            "tradeDate": "{iso_date}",
+            "date": "{iso_datetime}",
+            "type": "SELL",
+            "netAmount": 10.92,
+            "movementType": "DEBIT"
+          }
+        ]
+      }
+    },
+    {
+      "category": "supporting-datasets",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/items?only_my_items=true",
+      "observedRoutes": ["/overview"],
+      "observedCount": 1,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "note": "Bootstrap de itens conectados; informa produtos disponiveis (inclui TRANSACTIONS e INVESTMENTS_TRANSACTIONS)."
+    },
+    {
+      "category": "supporting-datasets",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/accounts?itemId={item_uuid}&itemId={item_uuid}...",
+      "observedRoutes": ["/overview"],
+      "observedCount": 1,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "note": "Retorna contas bancarias/cartao usadas para gerar fan-out de /transactions?accountId=."
+    },
+    {
+      "category": "supporting-datasets",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments?itemId={item_uuid}&itemId={item_uuid}...",
+      "observedRoutes": ["/overview", "/assets"],
+      "observedCount": 1,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "note": "Retorna posicoes e metadados de investimentos, incluindo transacoes embarcadas em alguns resultados."
+    },
+    {
+      "category": "session-support",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/access-token",
+      "observedRoutes": ["/overview"],
+      "observedCount": 1,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "responseShape": {
+        "accessToken": "jwt"
+      },
+      "note": "Token de sessao para chamadas no dominio my-api.pluggy.ai."
+    },
+    {
+      "category": "session-support",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/auth/me",
+      "observedRoutes": ["/overview"],
+      "observedCount": 1,
+      "statusCodes": [200],
+      "requestPayload": null,
+      "responseShape": {
+        "sub": "string",
+        "email": "string",
+        "name": "string",
+        "picture": "url"
+      }
+    },
+    {
+      "category": "connector-bootstrap",
+      "method": "POST",
+      "endpoint": "https://meu.pluggy.ai/api/connect-token",
+      "observedRoutes": ["/connections", "/assets"],
+      "observedCount": 1,
+      "statusCodes": [201],
+      "requestPayload": {
+        "clientUserId": "my-pluggy:{email}"
+      },
+      "responseShape": {
+        "accessToken": "jwt"
+      }
+    }
+  ]
+}

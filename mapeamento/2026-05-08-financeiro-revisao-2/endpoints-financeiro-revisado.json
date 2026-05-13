@@ -1,0 +1,343 @@
+{
+  "reviewRound": 2,
+  "reviewDate": "2026-05-08",
+  "project": "mcp-finance",
+  "mode": "exploration-only",
+  "focus": "dados financeiros e movimentacao monetaria",
+  "observedRoutes": [
+    "/overview",
+    "/cash",
+    "/assets",
+    "/connections",
+    "/connections/{item_uuid}"
+  ],
+  "pipelineModel": {
+    "summary": "carregamento base + fan-out por recurso",
+    "steps": [
+      "GET /api/access-token",
+      "GET /items?only_my_items=true",
+      "GET /accounts?itemId=...",
+      "GET /investments?itemId=...",
+      "GET /transactions?accountId=... (fan-out)",
+      "GET /investments/{investment_uuid}/transactions (fan-out)",
+      "GET /identity/?itemId=... (detalhe de conexao)"
+    ]
+  },
+  "endpoints": [
+    {
+      "id": "bank-transactions-by-account",
+      "category": "money-movements-core",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/transactions?accountId={account_uuid}",
+      "observedInRoutes": [
+        "/overview",
+        "/cash",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["accountId"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "array",
+        "itemFields": [
+          "id",
+          "description",
+          "descriptionRaw",
+          "currencyCode",
+          "amount",
+          "date",
+          "category",
+          "categoryId",
+          "accountId",
+          "status",
+          "paymentData",
+          "type",
+          "operationType",
+          "creditCardMetadata",
+          "providerId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "fanoutRule": "1 request por accountId",
+      "priorityForDB": "critical",
+      "sampleResponseSanitized": [
+        {
+          "id": "{transaction_uuid}",
+          "amount": -39.98,
+          "currencyCode": "BRL",
+          "type": "DEBIT",
+          "operationType": "PIX",
+          "accountId": "{account_uuid}",
+          "date": "{iso_datetime}"
+        }
+      ]
+    },
+    {
+      "id": "investment-transactions-by-investment",
+      "category": "money-movements-core",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments/{investment_uuid}/transactions",
+      "observedInRoutes": [
+        "/overview",
+        "/cash",
+        "/assets",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "pathParams": ["investment_uuid"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "object",
+        "fields": {
+          "total": "number",
+          "totalPages": "number",
+          "page": "number",
+          "results": [
+            {
+              "id": "uuid",
+              "amount": "number",
+              "value": "number",
+              "quantity": "number",
+              "tradeDate": "datetime",
+              "date": "datetime",
+              "type": "BUY|SELL|...",
+              "netAmount": "number",
+              "movementType": "CREDIT|DEBIT",
+              "expenses": "object|null"
+            }
+          ]
+        }
+      },
+      "fanoutRule": "1 request por investment_uuid",
+      "priorityForDB": "critical",
+      "sampleResponseSanitized": {
+        "total": 1,
+        "totalPages": 1,
+        "page": 1,
+        "results": [
+          {
+            "id": "{investment_tx_uuid}",
+            "amount": 50.0281,
+            "value": 0.01,
+            "quantity": 5000,
+            "type": "SELL",
+            "movementType": "DEBIT"
+          }
+        ]
+      }
+    },
+    {
+      "id": "accounts-by-item",
+      "category": "financial-context",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/accounts?itemId={item_uuid}&itemId={item_uuid}...",
+      "observedInRoutes": [
+        "/overview",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["itemId"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "array",
+        "itemFields": [
+          "id",
+          "type",
+          "subtype",
+          "name",
+          "balance",
+          "currencyCode",
+          "itemId",
+          "number",
+          "owner",
+          "bankData",
+          "creditData"
+        ]
+      },
+      "priorityForDB": "high",
+      "note": "Enumera contas/cartoes e fornece base para fan-out de transacoes por accountId."
+    },
+    {
+      "id": "investments-by-item",
+      "category": "financial-context",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments?itemId={item_uuid}&itemId={item_uuid}...",
+      "observedInRoutes": [
+        "/overview",
+        "/assets",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["itemId"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "array",
+        "itemFields": [
+          "id",
+          "itemId",
+          "type",
+          "subtype",
+          "name",
+          "balance",
+          "currencyCode",
+          "amount",
+          "quantity",
+          "transactions"
+        ]
+      },
+      "priorityForDB": "high",
+      "note": "Enumera ativos e gera universo de investment_uuid para fan-out de movimentacoes de investimentos."
+    },
+    {
+      "id": "items-only-my-items",
+      "category": "financial-context",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/items?only_my_items=true",
+      "observedInRoutes": [
+        "/overview",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["only_my_items"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "array",
+        "itemFields": [
+          "id",
+          "connector",
+          "products",
+          "status",
+          "executionStatus",
+          "lastUpdatedAt",
+          "clientUserId"
+        ]
+      },
+      "priorityForDB": "high",
+      "note": "Lista conectores e capacidades financeiras por item (inclui TRANSACTIONS e INVESTMENTS_TRANSACTIONS)."
+    },
+    {
+      "id": "identity-by-item",
+      "category": "financial-context",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/identity/?itemId={item_uuid}",
+      "observedInRoutes": [
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["itemId"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "object",
+        "fields": [
+          "itemId",
+          "fullName",
+          "document",
+          "birthDate",
+          "addresses",
+          "emails",
+          "phoneNumbers",
+          "financialRelationships",
+          "qualifications"
+        ]
+      },
+      "priorityForDB": "medium",
+      "note": "Traz contexto financeiro do titular (relacionamento financeiro e renda informada). Contem PII sensivel."
+    },
+    {
+      "id": "session-access-token",
+      "category": "session-support",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/access-token",
+      "observedInRoutes": [
+        "/overview",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "responseShape": {
+        "accessToken": "jwt"
+      },
+      "priorityForDB": "critical",
+      "note": "Dependencia de autenticacao para chamadas no dominio my-api.pluggy.ai."
+    },
+    {
+      "id": "session-auth-me",
+      "category": "session-support",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/auth/me",
+      "observedInRoutes": [
+        "/overview",
+        "/connections/{item_uuid}"
+      ],
+      "statusCodes": [200],
+      "responseShape": {
+        "sub": "string",
+        "email": "string",
+        "name": "string"
+      },
+      "priorityForDB": "low"
+    },
+    {
+      "id": "connect-token",
+      "category": "connector-bootstrap",
+      "method": "POST",
+      "endpoint": "https://meu.pluggy.ai/api/connect-token",
+      "observedInRoutes": [
+        "/connections",
+        "/assets"
+      ],
+      "statusCodes": [201],
+      "requestShape": {
+        "body": {
+          "clientUserId": "my-pluggy:{email}"
+        }
+      },
+      "responseShape": {
+        "accessToken": "jwt"
+      },
+      "priorityForDB": "medium",
+      "note": "Token de onboarding para fluxo de nova conexao (nao e endpoint de movimentacao)."
+    }
+  ],
+  "uiBehaviorNotes": [
+    "Em /cash, filtros Todos/Entradas/Saidas e filtro por conexao foram observados como filtro local sem nova chamada HTTP.",
+    "No detalhe de conexao (/connections/{item_uuid}), a UI dispara carregamento focado por item e fan-out das transacoes por conta e por investimento."
+  ],
+  "financialCapabilitiesFlaggedButNotObservedAsEndpoint": [
+    {
+      "capability": "LOANS",
+      "evidence": "aparece em products do item/conector",
+      "observedEndpoint": null,
+      "status": "not-observed-in-http-calls"
+    },
+    {
+      "capability": "PAYMENT_DATA",
+      "evidence": "aparece em products do item/conector",
+      "observedEndpoint": null,
+      "status": "not-observed-in-http-calls"
+    },
+    {
+      "capability": "BROKERAGE_NOTE",
+      "evidence": "aparece em products do item/conector",
+      "observedEndpoint": null,
+      "status": "not-observed-in-http-calls"
+    }
+  ],
+  "sensitiveDataPolicy": {
+    "rawSecretsStored": false,
+    "rawPiiStored": false,
+    "sanitization": "samples redacted with placeholders"
+  }
+}

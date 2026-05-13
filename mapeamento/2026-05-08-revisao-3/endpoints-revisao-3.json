@@ -1,0 +1,526 @@
+{
+  "reviewRound": 3,
+  "reviewDate": "2026-05-08",
+  "project": "mcp-finance",
+  "mode": "exploration-only",
+  "focus": "cobertura completa - financeiro, transacoes, cartoes, investimentos, lacunas anteriores",
+  "chromeBrowserId": "fe95c471-18a3-480a-88fe-c73587408417",
+  "observedRoutes": [
+    "/connections/75e67e3f-3461-4d0b-8c6c-200e9e93a959",
+    "/connections/2b025638-acc5-4914-b099-53948d67b020",
+    "/assets",
+    "/overview"
+  ],
+  "newDiscoveriesThisRound": [
+    "batch multi-itemId queries em /accounts e /investments",
+    "investments response inclui transactions inline (campo transactions[])",
+    "POST /api/connect-token com itemId no body = fluxo de sincronizacao/atualizacao",
+    "LOANS: coletado pelo Pluggy durante sync mas nao exposto como endpoint separado no dashboard consumidor",
+    "PAYMENT_DATA: incorporado no campo transaction.paymentData (payer, paymentMethod, receiver, boletoMetadata)",
+    "BROKERAGE_NOTE: incorporado em investmentTransaction.brokerageNumber (confirmado para EQUITY/STOCK)",
+    "Tipo EQUITY/STOCK confirmado nos investimentos Nubank (ALLD3)",
+    "investment.transactions[].expenses: objeto com breakdown detalhado de impostos (incomeTax, brokerageFee, etc.)",
+    "identity.qualifications.informedIncome: renda declarada com amount e frequency",
+    "identity.financialRelationships.productsServicesType: lista de produtos financeiros do usuario no banco",
+    "account.bankData: transferNumber, closingBalance, automaticallyInvestedBalance, overdraftContractedLimit",
+    "account.creditData.disaggregatedCreditLimits: array de limites por modalidade",
+    "billId em creditCardMetadata: referencia UUID da fatura, sem endpoint /bills disponivel no proxy consumidor",
+    "Atualizar button flow: POST /api/connect-token{itemId} -> Pluggy Widget iframe -> re-auth bancaria"
+  ],
+  "endpoints": [
+    {
+      "id": "auth-me",
+      "category": "session",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/auth/me",
+      "observedInRoutes": ["*"],
+      "statusCodes": [200],
+      "requestShape": { "queryParams": [], "body": null },
+      "responseShape": {
+        "fields": ["userId", "email", "name", "picture", "createdAt", "updatedAt"]
+      },
+      "priorityForDB": "low",
+      "notes": "session check - disparado em toda navegacao"
+    },
+    {
+      "id": "access-token",
+      "category": "auth",
+      "method": "GET",
+      "endpoint": "https://meu.pluggy.ai/api/access-token",
+      "observedInRoutes": ["*"],
+      "statusCodes": [200],
+      "requestShape": { "queryParams": [], "body": null },
+      "responseShape": {
+        "fields": ["accessToken"]
+      },
+      "priorityForDB": "low",
+      "notes": "JWT para autenticar chamadas a my-api.pluggy.ai; expira rapidamente"
+    },
+    {
+      "id": "connect-token-new",
+      "category": "onboarding",
+      "method": "POST",
+      "endpoint": "https://meu.pluggy.ai/api/connect-token",
+      "observedInRoutes": ["/assets", "/connections"],
+      "statusCodes": [201],
+      "requestShape": {
+        "body": { "clientUserId": "my-pluggy:{email}" }
+      },
+      "responseShape": {
+        "fields": ["accessToken"]
+      },
+      "priorityForDB": "low",
+      "notes": "sem itemId no body = adicionar nova conexao (abre Pluggy Widget)"
+    },
+    {
+      "id": "connect-token-update",
+      "category": "sync",
+      "method": "POST",
+      "endpoint": "https://meu.pluggy.ai/api/connect-token",
+      "observedInRoutes": ["/connections/{item_uuid}"],
+      "statusCodes": [201],
+      "requestShape": {
+        "body": {
+          "clientUserId": "my-pluggy:{email}",
+          "itemId": "{item_uuid}"
+        }
+      },
+      "responseShape": {
+        "fields": ["accessToken"]
+      },
+      "priorityForDB": "low",
+      "notes": "com itemId no body = atualizar/sincronizar conexao existente (abre Pluggy Widget). Triggerado pelo botao Atualizar. O widget exibiu 'Coletando dados de emprestimos.' a 89%, confirmando coleta de LOANS"
+    },
+    {
+      "id": "items-list",
+      "category": "connections",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/items",
+      "observedInRoutes": ["/connections", "/assets", "/overview", "/cash"],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["only_my_items=true"]
+      },
+      "responseShape": {
+        "type": "array",
+        "itemFields": [
+          "id",
+          "connector",
+          "status",
+          "executionStatus",
+          "products",
+          "lastUpdatedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "sampleResponseSanitized": [
+        {
+          "id": "{item_uuid}",
+          "connector": { "name": "PicPay", "id": 651 },
+          "status": "UPDATED",
+          "executionStatus": "SUCCESS",
+          "products": ["ACCOUNTS", "CREDIT_CARDS", "TRANSACTIONS", "INVESTMENTS", "IDENTITY", "INVESTMENTS_TRANSACTIONS", "PAYMENT_DATA", "BROKERAGE_NOTE", "LOANS"],
+          "lastUpdatedAt": "2026-05-08T16:27:39.153Z"
+        }
+      ],
+      "priorityForDB": "critical",
+      "notes": "item.products lista capacidades disponiveis. LOANS/PAYMENT_DATA/BROKERAGE_NOTE aparecem no array mas estao incorporados em outros endpoints no dashboard consumidor"
+    },
+    {
+      "id": "accounts-by-item",
+      "category": "accounts",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/accounts",
+      "observedInRoutes": ["/connections/{item_uuid}", "/assets"],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": [
+          "itemId={uuid} (pode repetir N vezes para batch: itemId=a&itemId=b&itemId=c)"
+        ],
+        "batchSupport": true
+      },
+      "responseShape": {
+        "type": "array",
+        "subtypes": ["CREDIT_CARD", "CHECKING_ACCOUNT", "SAVINGS_ACCOUNT"],
+        "itemFields": [
+          "id", "type", "subtype", "name", "balance", "currencyCode",
+          "itemId", "number", "marketingName", "taxNumber", "owner",
+          "bankData", "creditData", "createdAt", "updatedAt"
+        ],
+        "bankDataFields": [
+          "transferNumber",
+          "closingBalance",
+          "automaticallyInvestedBalance",
+          "overdraftContractedLimit",
+          "overdraftUsedLimit",
+          "unarrangedOverdraftAmount"
+        ],
+        "creditDataFields": [
+          "level",
+          "brand",
+          "balanceCloseDate",
+          "balanceDueDate",
+          "availableCreditLimit",
+          "balanceForeignCurrency",
+          "minimumPayment",
+          "creditLimit",
+          "isLimitFlexible",
+          "holderType",
+          "status",
+          "disaggregatedCreditLimits",
+          "additionalCards"
+        ]
+      },
+      "sampleResponseSanitized": [
+        {
+          "id": "{account_uuid}",
+          "type": "CREDIT",
+          "subtype": "CREDIT_CARD",
+          "name": "PIC PAY MASTERCARD GOLD",
+          "balance": 4328,
+          "currencyCode": "BRL",
+          "itemId": "{item_uuid}",
+          "creditData": {
+            "level": "GOLD",
+            "brand": "MASTERCARD",
+            "balanceDueDate": "2026-03-15",
+            "creditLimit": 10080,
+            "availableCreditLimit": 5752,
+            "disaggregatedCreditLimits": []
+          }
+        },
+        {
+          "id": "{account_uuid}",
+          "type": "BANK",
+          "subtype": "CHECKING_ACCOUNT",
+          "name": "Banco Bradesco",
+          "balance": 79.33,
+          "currencyCode": "BRL",
+          "itemId": "{item_uuid}",
+          "bankData": {
+            "transferNumber": "237/0152/00054727-1",
+            "closingBalance": 79.33,
+            "automaticallyInvestedBalance": 79.33,
+            "overdraftContractedLimit": 0,
+            "overdraftUsedLimit": 0,
+            "unarrangedOverdraftAmount": 0
+          }
+        }
+      ],
+      "priorityForDB": "critical",
+      "notes": "suporte a batch. Tipo LOAN/emprestimo nao apareceu como subtype - dados de emprestimo nao expostos no proxy consumidor"
+    },
+    {
+      "id": "transactions-by-account",
+      "category": "transactions",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/transactions",
+      "observedInRoutes": ["/connections/{item_uuid}", "/assets", "/cash", "/overview"],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["accountId={uuid}"],
+        "optionalParams": ["from (data YYYY-MM-DD, ignorado pelo proxy)", "to (data YYYY-MM-DD, ignorado pelo proxy)"],
+        "batchSupport": false
+      },
+      "responseShape": {
+        "type": "plain-array",
+        "notes": "NAO e paginado no proxy consumidor - retorna todos os registros da conta",
+        "itemFields": [
+          "id", "description", "descriptionRaw", "currencyCode",
+          "amount", "amountInAccountCurrency", "date",
+          "category", "categoryId", "balance", "accountId",
+          "providerCode", "status", "paymentData", "type", "operationType",
+          "creditCardMetadata", "acquirerData", "merchant",
+          "providerId", "order", "createdAt", "updatedAt"
+        ],
+        "paymentDataFields": [
+          "payer",
+          "paymentMethod",
+          "reason",
+          "receiver",
+          "receiverReferenceId",
+          "referenceNumber",
+          "boletoMetadata"
+        ],
+        "creditCardMetadataFields": [
+          "cardNumber",
+          "billId",
+          "purchaseDate",
+          "totalInstallments",
+          "installmentNumber",
+          "payeeMCC"
+        ]
+      },
+      "sampleResponseSanitized": [
+        {
+          "id": "{txn_uuid}",
+          "amount": -39.98,
+          "currencyCode": "BRL",
+          "type": "DEBIT",
+          "operationType": "PIX",
+          "status": "POSTED",
+          "paymentData": {
+            "payer": null,
+            "paymentMethod": "PIX",
+            "reason": null,
+            "receiver": null
+          },
+          "creditCardMetadata": null,
+          "accountId": "{account_uuid}",
+          "date": "2026-05-01T..."
+        },
+        {
+          "id": "{txn_uuid}",
+          "amount": 59.9,
+          "type": "DEBIT",
+          "status": "PENDING",
+          "paymentData": null,
+          "creditCardMetadata": {
+            "cardNumber": "7038",
+            "payeeMCC": 5818
+          },
+          "accountId": "{credit_card_account_uuid}",
+          "date": "2026-05-01T..."
+        },
+        {
+          "id": "{txn_uuid}",
+          "amount": -1675.05,
+          "type": "CREDIT",
+          "operationType": null,
+          "status": "POSTED",
+          "paymentData": {
+            "paymentMethod": "BOLETO",
+            "boletoMetadata": null
+          },
+          "creditCardMetadata": {
+            "billId": "c9c7d0fc-518c-4911-952a-b77d5954954b"
+          },
+          "date": "2026-04-17T..."
+        }
+      ],
+      "priorityForDB": "critical",
+      "notes": "PAYMENT_DATA incorporado no campo paymentData. billId em creditCardMetadata e apenas referencia - sem endpoint /bills exposto no proxy consumidor. Parametros from/to sao ignorados pelo proxy."
+    },
+    {
+      "id": "investments-by-item",
+      "category": "investments",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments",
+      "observedInRoutes": ["/connections/{item_uuid}", "/assets"],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["itemId={uuid} (pode repetir N vezes para batch)"],
+        "batchSupport": true
+      },
+      "responseShape": {
+        "type": "plain-array",
+        "notes": "inclui campo 'transactions' inline em cada investment (historico recente)",
+        "types": ["FIXED_INCOME", "EQUITY"],
+        "subtypes": ["CDB", "STOCK"],
+        "itemFields": [
+          "id", "number", "name", "balance", "currencyCode",
+          "type", "subtype",
+          "lastMonthRate", "lastTwelveMonthsRate", "annualRate", "fixedAnnualRate",
+          "rate", "rateType",
+          "itemId", "code", "isin", "metadata",
+          "value", "quantity", "amount", "taxes", "taxes2",
+          "amountProfit", "amountWithdrawal", "amountOriginal",
+          "date", "dueDate", "issueDate", "purchaseDate",
+          "owner", "issuer", "issuerCNPJ", "status", "institution",
+          "transactions",
+          "createdAt", "updatedAt"
+        ]
+      },
+      "sampleResponseSanitized": [
+        {
+          "id": "{investment_uuid}",
+          "name": "CDB - PICPAY INSTITUICAO DE PAGAMENTO S/A",
+          "type": "FIXED_INCOME",
+          "subtype": "CDB",
+          "balance": 0,
+          "value": 0.01,
+          "quantity": 5000,
+          "itemId": "{item_uuid}",
+          "transactions": [
+            {
+              "id": "{inv_txn_uuid}",
+              "amount": 50.03,
+              "type": "SELL",
+              "netAmount": 50,
+              "movementType": "DEBIT",
+              "expenses": {
+                "incomeTax": 0,
+                "brokerageFee": null,
+                "serviceTax": null,
+                "other": null
+              }
+            }
+          ]
+        },
+        {
+          "id": "{investment_uuid}",
+          "name": "ALLD3",
+          "type": "EQUITY",
+          "subtype": "STOCK",
+          "code": "ALLD3",
+          "isin": "BRALLDACNOR3",
+          "balance": 0,
+          "value": 7.29,
+          "itemId": "{item_uuid}",
+          "transactions": []
+        }
+      ],
+      "priorityForDB": "critical"
+    },
+    {
+      "id": "investment-transactions",
+      "category": "investments",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/investments/{investment_uuid}/transactions",
+      "observedInRoutes": ["/connections/{item_uuid}", "/assets"],
+      "statusCodes": [200],
+      "requestShape": {
+        "pathParams": ["investment_uuid"],
+        "optionalParams": ["page=N"],
+        "body": null
+      },
+      "responseShape": {
+        "type": "paginated-object",
+        "fields": ["total", "totalPages", "page", "results"],
+        "resultItemFields": [
+          "id", "amount", "description", "value", "quantity",
+          "tradeDate", "date", "type", "netAmount",
+          "brokerageNumber", "expenses", "agreedRate", "movementType"
+        ],
+        "expensesFields": [
+          "id",
+          "serviceTax",
+          "brokerageFee",
+          "incomeTax",
+          "other",
+          "tradingAssetsNoticeFee",
+          "maintenanceFee",
+          "settlementFee",
+          "clearingFee",
+          "stockExchangeFee",
+          "custodyFee",
+          "operatingFee",
+          "transactionId",
+          "investment_transaction_id",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "sampleResponseSanitized": {
+        "total": 2,
+        "totalPages": 1,
+        "page": 1,
+        "results": [
+          {
+            "id": "{inv_txn_uuid}",
+            "amount": 7.4,
+            "value": 7.4,
+            "quantity": 1,
+            "tradeDate": "2026-02-27T00:00:00.000Z",
+            "type": "SELL",
+            "netAmount": 7.4,
+            "brokerageNumber": "4720983",
+            "expenses": null,
+            "movementType": "DEBIT"
+          }
+        ]
+      },
+      "priorityForDB": "critical",
+      "notes": "brokerageNumber preenchido para EQUITY/STOCK (BROKERAGE_NOTE incorporado). expenses objeto com breakdown detalhado de impostos para FIXED_INCOME."
+    },
+    {
+      "id": "identity-by-item",
+      "category": "identity",
+      "method": "GET",
+      "endpoint": "https://my-api.pluggy.ai/identity/",
+      "observedInRoutes": ["/connections/{item_uuid}"],
+      "statusCodes": [200],
+      "requestShape": {
+        "queryParams": ["itemId={uuid}"],
+        "body": null
+      },
+      "responseShape": {
+        "fields": [
+          "id", "itemId", "createdAt", "updatedAt",
+          "birthDate", "taxNumber", "document", "documentType",
+          "jobTitle", "companyName", "fullName",
+          "phoneNumbers", "emails", "addresses",
+          "relations", "investorProfile",
+          "establishmentCode", "establishmentName",
+          "financialRelationships", "qualifications"
+        ],
+        "financialRelationshipsFields": [
+          "startDate",
+          "productsServicesType",
+          "procurators",
+          "accounts"
+        ],
+        "qualificationsFields": [
+          "companyCnpj",
+          "informedIncome"
+        ],
+        "informedIncomeFields": [
+          "amount",
+          "date",
+          "frequency"
+        ]
+      },
+      "sampleResponseSanitized": {
+        "id": "{identity_uuid}",
+        "itemId": "{item_uuid}",
+        "fullName": "Wilson Felipe Da Silva",
+        "birthDate": "1995-11-20T03:00:00.000Z",
+        "taxNumber": "351.725.748-67",
+        "emails": ["wfelipe2011@gmail.com"],
+        "financialRelationships": {
+          "startDate": "2022-11-06T20:03:30.000Z",
+          "productsServicesType": ["CONTA_PAGAMENTO_PRE_PAGA", "CARTAO_CREDITO"],
+          "procurators": [],
+          "accounts": []
+        },
+        "qualifications": {
+          "companyCnpj": "22896431000110",
+          "informedIncome": {
+            "amount": 7000,
+            "date": "2026-02-19T00:00:00.000Z",
+            "frequency": "MENSAL"
+          }
+        }
+      },
+      "priorityForDB": "medium",
+      "notes": "qualifications.informedIncome traz renda declarada mensalmente. financialRelationships.productsServicesType lista produtos contratados no banco."
+    }
+  ],
+  "notExposedInConsumerDashboard": [
+    {
+      "product": "LOANS",
+      "status": "coletado-mas-nao-exposto",
+      "evidence": "Pluggy Connect widget mostrou 'Coletando dados de emprestimos.' a 89% durante sincronizacao. Nenhum endpoint /loans disponivel no proxy. Nenhuma conta com subtype LOAN apareceu em /accounts.",
+      "implication": "Dados de emprestimos existem internamente no Pluggy mas o proxy my-api.pluggy.ai nao os expoe ao consumidor final do dashboard meu.pluggy.ai"
+    },
+    {
+      "product": "PAYMENT_DATA",
+      "status": "incorporado-em-transactions",
+      "evidence": "Campo paymentData presente em transacoes: {payer, paymentMethod, receiver, receiverReferenceId, referenceNumber, boletoMetadata}",
+      "implication": "Sem endpoint separado. Dados sao lidos diretamente do campo paymentData nas transacoes."
+    },
+    {
+      "product": "BROKERAGE_NOTE",
+      "status": "incorporado-em-investment-transactions",
+      "evidence": "Campo brokerageNumber preenchido em investment transactions de EQUITY/STOCK (ex: '4720983', '3711443')",
+      "implication": "Sem endpoint separado. Nota de corretagem referenciada pelo numero no campo brokerageNumber."
+    },
+    {
+      "product": "creditCardBills",
+      "status": "referencia-sem-endpoint",
+      "evidence": "creditCardMetadata.billId presente em transacoes de pagamento de fatura. Tentativas de GET /bills/{id} e /accounts/{id}/bills retornaram 404.",
+      "implication": "billId e apenas referencia interna. Dados da fatura nao sao expostos separadamente."
+    }
+  ]
+}
