@@ -8,6 +8,7 @@ import type {
   InvestimentoMensal,
   Digest,
   TransacoesResponse,
+  Tendencias,
 } from "./types.ts";
 
 const BASE = "";
@@ -59,4 +60,8 @@ export function fetchDigest(month: string): Promise<Digest> {
 
 export function fetchTransacoes(month: string, limit = 50, offset = 0): Promise<TransacoesResponse> {
   return get<TransacoesResponse>(`/api/transacoes?month=${month}&limit=${limit}&offset=${offset}`);
+}
+
+export function fetchTendencias(): Promise<Tendencias> {
+  return get<Tendencias>("/api/tendencias");
 }

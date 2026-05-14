@@ -9,7 +9,7 @@ function parseLimit(): number {
     const val = parseInt(process.argv[idx + 1]!, 10);
     if (!isNaN(val) && val > 0) return val;
   }
-  return 1000;
+  return 2;
 }
 
 const db = new BunPgAdapter();

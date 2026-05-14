@@ -7,6 +7,8 @@ export interface CashflowMensal {
   saldo_liquido: number;
   num_receitas: number;
   num_despesas: number;
+  total_emprestimos?: number;
+  total_receitas_operacionais?: number;
 }
 
 export interface GastoGrupo {
@@ -138,4 +140,23 @@ export interface Transacao {
 export interface TransacoesResponse {
   items: Transacao[];
   total: number;
+}
+
+export interface GrupoTendencia {
+  group_pt: string;
+  media_mensal: number;
+  meses_presentes: number;
+}
+
+export interface RecorrenteAI {
+  merchant_name: string;
+  category_group_pt: string;
+  media_valor: number;
+  ocorrencias: number;
+  recurrence_period: string | null;
+}
+
+export interface Tendencias {
+  grupos: GrupoTendencia[];
+  recorrentes: RecorrenteAI[];
 }

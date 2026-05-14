@@ -9,7 +9,7 @@
 -- Populado pelo pipeline gold-ai-agent (change separada)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_transaction_insights (
-  transaction_id    TEXT PRIMARY KEY REFERENCES transactions_enriched(id),
+  transaction_id    TEXT PRIMARY KEY REFERENCES transactions(id),
   merchant_name     TEXT,           -- "Netflix", "Amazon Web Services"
   merchant_country  TEXT,           -- "BR", "US"
   is_recurring      BOOLEAN,        -- assinatura detectada

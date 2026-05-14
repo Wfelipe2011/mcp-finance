@@ -1,24 +1,30 @@
 import { useState, useEffect } from "react";
 import { Paper, Typography } from "@mui/material";
-import { fetchGastos } from "../api/client.ts";
-import type { GastosMensais } from "../api/types.ts";
+import { fetchGastos, fetchTendencias } from "../api/client.ts";
+import type { GastosMensais, Tendencias } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { GruposDonut } from "../components/GruposDonut.tsx";
 import { CategoriaBarList } from "../components/CategoriaBarList.tsx";
 import { NovosGastos } from "../components/NovosGastos.tsx";
+import { TendenciasGrupos } from "../components/TendenciasGrupos.tsx";
+import { TendenciasRecorrentes } from "../components/TendenciasRecorrentes.tsx";
 import { formatBRL } from "../utils/format.ts";
 
 export function Gastos({ month }: { month: string }) {
   const [data, setData] = useState<GastosMensais | null>(null);
+  const [tendencias, setTendencias] = useState<Tendencias | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetchGastos(month)
-      .then((d) => { setData(d); setLoading(false); })
+    Promise.all([
+      fetchGastos(month),
+      fetchTendencias().catch(() => null),
+    ])
+      .then(([d, t]) => { setData(d); setTendencias(t); setLoading(false); })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Erro ao carregar gastos");
         setLoading(false);
@@ -55,6 +61,24 @@ export function Gastos({ month }: { month: string }) {
           <Typography variant="body2" fontWeight={600} color="text.primary">🆕 Novos este mês</Typography>
           <NovosGastos novos={data.novos} />
         </Paper>
+      )}
+
+      {tendencias && (
+        <>
+          <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+            <Typography variant="body2" fontWeight={600} color="text.primary" gutterBottom>
+              Média 3 meses
+            </Typography>
+            <TendenciasGrupos grupos={tendencias.grupos} />
+          </Paper>
+
+          <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+            <Typography variant="body2" fontWeight={600} color="text.primary" gutterBottom>
+              Recorrentes identificados
+            </Typography>
+            <TendenciasRecorrentes recorrentes={tendencias.recorrentes} />
+          </Paper>
+        </>
       )}
     </div>
   );

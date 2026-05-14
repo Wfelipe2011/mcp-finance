@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Paper, Typography } from "@mui/material";
+import { Chip, Paper, Typography } from "@mui/material";
 import { fetchCashflow, fetchRunway } from "../api/client.ts";
 import type { CashflowMensal, Digest, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -58,7 +58,18 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Typography variant="caption" color="text.secondary">Receitas</Typography>
-            <Typography variant="body1" fontWeight={600} color="success.dark">{formatBRL(cashflow.total_receitas)}</Typography>
+            <Typography variant="body1" fontWeight={600} color="success.dark">
+              {formatBRL(cashflow.total_receitas_operacionais ?? cashflow.total_receitas)}
+            </Typography>
+            {cashflow.total_emprestimos != null && cashflow.total_emprestimos > 0 && (
+              <Chip
+                label={`+ ${formatBRL(cashflow.total_emprestimos)} (empréstimo)`}
+                size="small"
+                color="info"
+                variant="outlined"
+                sx={{ mt: 0.5, fontSize: "0.7rem" }}
+              />
+            )}
           </div>
           <div>
             <Typography variant="caption" color="text.secondary">Despesas</Typography>

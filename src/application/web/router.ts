@@ -8,6 +8,7 @@ import { handleInvestimentos } from "./routes/investimentos.ts";
 import { handleDigest } from "./routes/digest.ts";
 import { handleTransacoes } from "./routes/transacoes.ts";
 import { handleMeses } from "./routes/meses.ts";
+import { handleTendencias } from "./routes/tendencias.ts";
 
 export async function router(req: Request, url: URL): Promise<Response> {
   const path = url.pathname;
@@ -22,6 +23,7 @@ export async function router(req: Request, url: URL): Promise<Response> {
   if (path === "/api/digest" && req.method === "GET") return handleDigest(req, url);
   if (path === "/api/transacoes" && req.method === "GET") return handleTransacoes(req, url);
   if (path === "/api/meses" && req.method === "GET") return handleMeses(req, url);
+  if (path === "/api/tendencias" && req.method === "GET") return handleTendencias(req, url);
 
   return errorResponse("Not found", 404);
 }

@@ -330,7 +330,13 @@ export class BunPgAdapter {
           await tx`TRUNCATE transactions_enriched`;
           await tx`
             INSERT INTO transactions_enriched
-            WITH kind AS (
+            WITH deduplicated AS (
+              SELECT DISTINCT ON (account_id, date::date, ABS(amount), type)
+                *
+              FROM transactions
+              ORDER BY account_id, date::date, ABS(amount), type, updated_at DESC
+            ),
+            kind AS (
               SELECT
                 t.id,
                 CASE
@@ -354,10 +360,21 @@ export class BunPgAdapter {
                     AND t.account_id IN (SELECT id FROM accounts WHERE type = 'CREDIT')
                     AND (t.description ILIKE '%pagamento%fatura%' OR t.description ILIKE '%inclusao pgto%')
                     THEN 'TRANSFER'
+                  WHEN t.type = 'DEBIT'
+                    AND cg.group_id IN (
+                      SELECT group_id FROM category_groups WHERE name_pt = 'Transferência entre Próprias Contas'
+                    )
+                    THEN 'TRANSFER'
+                  WHEN t.type = 'DEBIT'
+                    AND cg.group_id IN (
+                      SELECT group_id FROM category_groups WHERE name_pt = 'Investimentos'
+                    )
+                    THEN 'INVEST'
                   WHEN t.type = 'DEBIT' THEN 'EXPENSE'
                   ELSE 'INCOME'
                 END AS transaction_kind
-              FROM transactions t
+              FROM deduplicated t
+              LEFT JOIN category_groups cg ON cg.group_id = LEFT(t.category_id, 2)
             )
             SELECT
               t.id,
@@ -399,7 +416,7 @@ export class BunPgAdapter {
               cl.name_pt AS category_pt,
               LEFT(t.category_id, 2) AS category_group,
               cg.name_pt AS category_group_pt
-            FROM transactions t
+            FROM deduplicated t
             JOIN kind k ON k.id = t.id
             JOIN accounts a ON a.id = t.account_id
             LEFT JOIN category_labels cl ON cl.category_id = t.category_id
@@ -582,11 +599,13 @@ export class BunPgAdapter {
         year: number; month: number; month_name_pt: string;
         total_receitas: string | null; total_despesas: string | null; saldo_liquido: string | null;
         num_receitas: string; num_despesas: string;
+        total_emprestimos: string | null; total_receitas_operacionais: string | null;
       }[]
     >`
       SELECT year, month, month_name_pt,
              total_receitas, total_despesas, saldo_liquido,
-             num_receitas, num_despesas
+             num_receitas, num_despesas,
+             total_emprestimos, total_receitas_operacionais
       FROM cube_cashflow_mensal
       WHERE year = ${year} AND month = ${month}
       LIMIT 1
@@ -600,6 +619,8 @@ export class BunPgAdapter {
       saldo_liquido:  Number(row.saldo_liquido  ?? 0),
       num_receitas:   parseInt(row.num_receitas, 10),
       num_despesas:   parseInt(row.num_despesas, 10),
+      total_emprestimos: row.total_emprestimos !== null ? Number(row.total_emprestimos) : undefined,
+      total_receitas_operacionais: row.total_receitas_operacionais !== null ? Number(row.total_receitas_operacionais) : undefined,
     };
   }
 
@@ -809,6 +830,31 @@ export class BunPgAdapter {
       ORDER BY year DESC, month DESC
     `;
     return rows.map(r => `${r.year}-${String(r.month).padStart(2, "0")}`);
+  }
+
+  async getTendencias() {
+    const [gruposRows, recorrentesRows] = await Promise.all([
+      this.sql<{ nome: string; valor: string; meses_presentes: string }[]>`
+        SELECT nome, valor, meses_presentes FROM cube_tendencias WHERE tipo = 'grupo' ORDER BY valor DESC
+      `,
+      this.sql<{ merchant: string; nome: string; valor: string; meses_presentes: string; period: string | null }[]>`
+        SELECT merchant, nome, valor, meses_presentes, period FROM cube_tendencias WHERE tipo = 'recorrente' ORDER BY valor DESC
+      `,
+    ]);
+    return {
+      grupos: gruposRows.map(r => ({
+        group_pt: r.nome,
+        media_mensal: Number(r.valor),
+        meses_presentes: parseInt(r.meses_presentes, 10),
+      })),
+      recorrentes: recorrentesRows.map(r => ({
+        merchant_name: r.merchant,
+        category_group_pt: r.nome,
+        media_valor: Number(r.valor),
+        ocorrencias: parseInt(r.meses_presentes, 10),
+        recurrence_period: r.period,
+      })),
+    };
   }
 
   async close(): Promise<void> {

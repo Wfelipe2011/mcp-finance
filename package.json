@@ -9,7 +9,7 @@
     "digest": "bun run src/scripts/digest.ts",
     "web:dev": "bun run src/application/web/server.ts",
     "web:start": "bun run src/application/web/server.ts",
-    "client:dev": "cd client && bun run dev",
+    "client:dev": "cd client && bun run dev --host",
     "client:build": "cd client && bun run build",
     "client:preview": "cd client && bun run preview"
   },
