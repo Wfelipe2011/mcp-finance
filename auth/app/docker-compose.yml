@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      # Arquivo de sessões dentro do diretório de dados montado como bind
+      SESSIONS_FILE: ./data/sessions.json
+      SCREENSHOTS_DIR: ./screenshots
+    volumes:
+      # Bind mounts — acessíveis diretamente na máquina host
+      - ./data:/app/data
+      - ./screenshots:/app/screenshots
+    restart: unless-stopped

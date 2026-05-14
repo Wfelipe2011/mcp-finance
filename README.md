@@ -23,7 +23,7 @@ cp .env.example .env
 docker compose up -d
 
 # 4. Acesse o painel
-# http://localhost:3001
+# http://localhost:4001
 ```
 
 No primeiro acesso, faça login com `APP_USERNAME` / `APP_PASSWORD` definidos no `.env`, depois clique em **🔄** para sincronizar os dados do Pluggy.
@@ -74,7 +74,7 @@ No primeiro acesso, faça login com `APP_USERNAME` / `APP_PASSWORD` definidos no
 
 ## Como usar
 
-1. **Login** — acesse `http://localhost:3001` e faça login com `APP_USERNAME` / `APP_PASSWORD`
+1. **Login** — acesse `http://localhost:4001` e faça login com `APP_USERNAME` / `APP_PASSWORD`
 2. **Sincronizar** — clique em **🔄** no cabeçalho para importar transações do Pluggy (aguarde ~30-60s no primeiro login do dia)
 3. **Navegar** — use as abas na barra inferior:
    - **Resumo** — cashflow mensal, saldo por banco, compromissos
