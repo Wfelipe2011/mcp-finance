@@ -25,6 +25,7 @@ console.log(`[digest] Gerando digest para ${year}-${String(month).padStart(2, "0
 
 const insights = await db.aiDigests.getMonthInsights(year, month);
 const totalCount = await db.aiDigests.getTotalTransactionCount(year, month);
+const previousDigests = await db.aiDigests.getPreviousDigests(year, month, 3);
 
 const enrichmentCoverage = totalCount > 0 ? insights.length / totalCount : 0;
 
@@ -60,6 +61,7 @@ const digestResult = await generateDigest({
   debt_payments,
   enrichment_coverage: enrichmentCoverage,
   insights,
+  previousDigests,
 });
 
 await db.aiDigests.upsert({

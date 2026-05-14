@@ -55,9 +55,20 @@ export interface AiInsightsRepository {
   upsertOne(row: InsightRow): Promise<void>;
 }
 
+export interface PreviousDigestRow {
+  year: number;
+  month: number;
+  cashflow_real: number;
+  debt_inflows: number;
+  debt_payments: number;
+  narrative_pt: string | null;
+  flags: string[] | null;
+}
+
 export interface AiDigestsRepository {
   getMonthInsights(year: number, month: number): Promise<MonthInsightRow[]>;
   getTotalTransactionCount(year: number, month: number): Promise<number>;
+  getPreviousDigests(year: number, month: number, limit: number): Promise<PreviousDigestRow[]>;
   upsert(row: DigestRow): Promise<void>;
 }
 
@@ -515,6 +526,17 @@ export class BunPgAdapter {
             AND EXTRACT(MONTH FROM date_day) = ${month}
         `;
         return parseInt(rows[0]?.count ?? "0", 10);
+      },
+
+      async getPreviousDigests(year: number, month: number, limit: number): Promise<PreviousDigestRow[]> {
+        const rows = await sql<PreviousDigestRow[]>`
+          SELECT year, month, cashflow_real, debt_inflows, debt_payments, narrative_pt, flags
+          FROM ai_monthly_digest
+          WHERE (year * 100 + month) < (${year} * 100 + ${month})
+          ORDER BY year DESC, month DESC
+          LIMIT ${limit}
+        `;
+        return rows.reverse(); // cronológico: mais antigo primeiro
       },
 
       async upsert(row: DigestRow): Promise<void> {

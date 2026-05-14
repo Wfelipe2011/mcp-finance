@@ -97,3 +97,45 @@ SELECT
     AT TIME ZONE 'America/Sao_Paulo')::DATE                 AS date_day
 FROM investment_transactions it
 INNER JOIN investments inv ON inv.id = it.investment_id;
+
+-- ────────────────────────────────────────────────
+-- f_parcelas_futuras
+-- Projeção temporal de parcelas futuras usando generate_series
+-- Grain: (purchase_day, account_id, total_installments, amount, installment_seq)
+-- Para cada compra parcelada em aberto, gera uma linha por parcela ainda não registrada
+-- A data de vencimento é aproximada (~30 dias por parcela a partir da parcela atual)
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW f_parcelas_futuras AS
+WITH last_installment AS (
+  -- Pega o último registro de cada compra parcelada (MAX installment_number por compra)
+  SELECT DISTINCT ON (purchase_day, account_id, total_installments, ROUND(amount::NUMERIC, 2))
+    description,
+    purchase_day,
+    account_id,
+    owner_normalized,
+    category_pt,
+    category_group_pt,
+    installment_number                            AS last_installment_number,
+    total_installments,
+    (total_installments - installment_number)     AS installments_remaining,
+    amount
+  FROM f_parcelas
+  WHERE installments_remaining > 0
+  ORDER BY purchase_day, account_id, total_installments, ROUND(amount::NUMERIC, 2),
+           installment_number DESC
+)
+SELECT
+  DATE_TRUNC('month',
+    purchase_day + (last_installment_number + gs.n) * INTERVAL '30 days'
+  )::DATE                              AS projected_month,
+  gs.n                                 AS installment_seq,
+  amount                               AS installment_amount,
+  description,
+  owner_normalized,
+  category_pt,
+  category_group_pt,
+  account_id,
+  total_installments,
+  installments_remaining
+FROM last_installment
+CROSS JOIN LATERAL generate_series(1, installments_remaining) AS gs(n);

@@ -229,3 +229,74 @@ GROUP BY
   COALESCE(dc.group_pt,    fc.category_group_pt, 'Sem Grupo'),
   COALESCE(dc.category_pt, fc.category_pt,       'Sem Categoria'),
   du.display_name;
+
+-- ────────────────────────────────────────────────
+-- kpi_cash_runway
+-- Fôlego financeiro: quantos meses a família sobrevive sem receita
+-- Grain: 1 linha (snapshot atual)
+-- Fórmula: saldo_liquido (contas correntes + poupança) / media_saidas_90d (3 meses)
+-- runway_meses = NULL se não há histórico de despesas (evita divisão por zero)
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW kpi_cash_runway AS
+WITH saldo_atual AS (
+  SELECT COALESCE(SUM(saldo_atual), 0) AS saldo_liquido
+  FROM cube_patrimonio
+  WHERE subtipo IN ('CHECKING_ACCOUNT', 'SAVINGS_ACCOUNT')
+),
+media_gastos AS (
+  SELECT AVG(total_despesas) AS media_saidas_90d
+  FROM (
+    SELECT total_despesas
+    FROM cube_cashflow_mensal
+    ORDER BY year DESC, month DESC
+    LIMIT 3
+  ) sub
+)
+SELECT
+  sa.saldo_liquido,
+  mg.media_saidas_90d,
+  ROUND(sa.saldo_liquido / NULLIF(mg.media_saidas_90d, 0), 1) AS runway_meses
+FROM saldo_atual sa, media_gastos mg;
+
+-- ────────────────────────────────────────────────
+-- cube_cashflow_projetado
+-- Cashflow histórico (real) + futuro (estimado por parcelas)
+-- Grain: (year, month) — uma linha por mês
+-- is_projected = false: dados reais de cube_cashflow_mensal
+-- is_projected = true:  estimativa baseada em f_parcelas_futuras
+-- Mês atual não é duplicado: futuro começa no mês seguinte ao último com dados reais
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW cube_cashflow_projetado AS
+WITH historico AS (
+  SELECT
+    year,
+    month,
+    month_name_pt,
+    total_receitas,
+    total_despesas,
+    saldo_liquido,
+    FALSE AS is_projected
+  FROM cube_cashflow_mensal
+),
+ultimo_mes_real AS (
+  SELECT MAX(year * 100 + month) AS ym FROM cube_cashflow_mensal
+),
+futuro AS (
+  SELECT
+    EXTRACT(YEAR  FROM pf.projected_month)::INT            AS year,
+    EXTRACT(MONTH FROM pf.projected_month)::INT            AS month,
+    (SELECT month_name_pt FROM d_data
+     WHERE month = EXTRACT(MONTH FROM pf.projected_month)::INT LIMIT 1)  AS month_name_pt,
+    NULL::NUMERIC                                          AS total_receitas,
+    ROUND(SUM(pf.installment_amount)::NUMERIC, 2)          AS total_despesas,
+    ROUND(-SUM(pf.installment_amount)::NUMERIC, 2)         AS saldo_liquido,
+    TRUE                                                   AS is_projected
+  FROM f_parcelas_futuras pf, ultimo_mes_real umr
+  WHERE (EXTRACT(YEAR FROM pf.projected_month)::INT * 100
+       + EXTRACT(MONTH FROM pf.projected_month)::INT) > umr.ym
+  GROUP BY pf.projected_month
+)
+SELECT * FROM historico
+UNION ALL
+SELECT * FROM futuro
+ORDER BY year, month;
