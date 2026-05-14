@@ -574,6 +574,243 @@ export class BunPgAdapter {
     };
   }
 
+  // ── web dashboard queries ─────────────────────────────────────────────────
+
+  async getCashflowMensal(year: number, month: number) {
+    const rows = await this.sql<
+      {
+        year: number; month: number; month_name_pt: string;
+        total_receitas: string | null; total_despesas: string | null; saldo_liquido: string | null;
+        num_receitas: string; num_despesas: string;
+      }[]
+    >`
+      SELECT year, month, month_name_pt,
+             total_receitas, total_despesas, saldo_liquido,
+             num_receitas, num_despesas
+      FROM cube_cashflow_mensal
+      WHERE year = ${year} AND month = ${month}
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      year: row.year, month: row.month, month_name_pt: row.month_name_pt,
+      total_receitas: Number(row.total_receitas ?? 0),
+      total_despesas: Number(row.total_despesas ?? 0),
+      saldo_liquido:  Number(row.saldo_liquido  ?? 0),
+      num_receitas:   parseInt(row.num_receitas, 10),
+      num_despesas:   parseInt(row.num_despesas, 10),
+    };
+  }
+
+  async getGastosMensais(year: number, month: number) {
+    const [grupos, categorias, novos] = await Promise.all([
+      this.sql<{ group_pt: string; num_transacoes: number; total_gastos: string; ticket_medio: string }[]>`
+        SELECT group_pt, num_transacoes, total_gastos, ticket_medio
+        FROM cube_gastos_grupo_mensal
+        WHERE year = ${year} AND month = ${month}
+        ORDER BY total_gastos DESC
+      `,
+      this.sql<{ group_pt: string; category_pt: string; num_transacoes: number; total_gastos: string; ticket_medio: string }[]>`
+        SELECT group_pt, category_pt, num_transacoes, total_gastos, ticket_medio
+        FROM cube_gastos_categoria_mensal
+        WHERE year = ${year} AND month = ${month}
+        ORDER BY total_gastos DESC
+      `,
+      this.sql<{ group_pt: string; category_pt: string; display_name: string; num_transacoes: number; total_gastos: string }[]>`
+        SELECT group_pt, category_pt, display_name, num_transacoes, total_gastos
+        FROM cube_gastos_novos
+        WHERE year = ${year} AND month = ${month}
+        ORDER BY total_gastos DESC
+      `,
+    ]);
+    return {
+      grupos:     grupos.map(r => ({ ...r, total_gastos: Number(r.total_gastos), ticket_medio: Number(r.ticket_medio) })),
+      categorias: categorias.map(r => ({ ...r, total_gastos: Number(r.total_gastos), ticket_medio: Number(r.ticket_medio) })),
+      novos:      novos.map(r => ({ ...r, total_gastos: Number(r.total_gastos) })),
+    };
+  }
+
+  async getCompromissosAtivos() {
+    const rows = await this.sql<
+      {
+        description: string; purchase_day: string; amount: string;
+        account_id: string; cartao: string; dono: string;
+        category_pt: string | null; category_group_pt: string | null;
+        installment_atual: number; total_installments: number; compromisso_restante: string;
+      }[]
+    >`
+      SELECT description, purchase_day, amount, account_id, cartao, dono,
+             category_pt, category_group_pt,
+             installment_atual, total_installments, compromisso_restante
+      FROM cube_compromissos_ativos
+      ORDER BY compromisso_restante DESC
+    `;
+    return rows.map(r => ({
+      ...r,
+      amount: Number(r.amount),
+      compromisso_restante: Number(r.compromisso_restante),
+    }));
+  }
+
+  async getCashflowProjetado() {
+    const rows = await this.sql<
+      {
+        year: number; month: number; month_name_pt: string | null;
+        total_receitas: string | null; total_despesas: string | null;
+        saldo_liquido: string | null; is_projected: boolean;
+      }[]
+    >`
+      SELECT year, month, month_name_pt, total_receitas, total_despesas, saldo_liquido, is_projected
+      FROM cube_cashflow_projetado
+      ORDER BY year, month ASC
+    `;
+    return rows.map(r => ({
+      year: r.year, month: r.month, month_name_pt: r.month_name_pt,
+      total_receitas: r.total_receitas !== null ? Number(r.total_receitas) : null,
+      total_despesas: r.total_despesas !== null ? Number(r.total_despesas) : null,
+      saldo_liquido:  r.saldo_liquido  !== null ? Number(r.saldo_liquido)  : null,
+      is_projected: r.is_projected,
+    }));
+  }
+
+  async getRunway() {
+    const rows = await this.sql<{ saldo_liquido: string; media_saidas_90d: string | null; runway_meses: string | null }[]>`
+      SELECT saldo_liquido, media_saidas_90d, runway_meses FROM kpi_cash_runway LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      saldo_liquido:    Number(row.saldo_liquido),
+      media_saidas_90d: row.media_saidas_90d !== null ? Number(row.media_saidas_90d) : null,
+      runway_meses:     row.runway_meses     !== null ? Number(row.runway_meses)     : null,
+    };
+  }
+
+  async getPatrimonio() {
+    const rows = await this.sql<
+      {
+        account_id: string; nome: string; tipo: string; subtipo: string;
+        banco: string | null; dono: string | null; moeda: string | null;
+        saldo_atual: string | null; limite_credito: string | null; credito_disponivel: string | null;
+      }[]
+    >`
+      SELECT account_id, nome, tipo, subtipo, banco, dono, moeda,
+             saldo_atual, limite_credito, credito_disponivel
+      FROM cube_patrimonio
+    `;
+    const items = rows.map(r => ({
+      ...r,
+      saldo_atual:         r.saldo_atual         !== null ? Number(r.saldo_atual)         : null,
+      limite_credito:      r.limite_credito       !== null ? Number(r.limite_credito)      : null,
+      credito_disponivel:  r.credito_disponivel   !== null ? Number(r.credito_disponivel)  : null,
+    }));
+    const total_patrimonio = items.reduce((sum, r) => {
+      if (r.tipo === "BANK" || r.tipo === "SAVINGS") return sum + (r.saldo_atual ?? 0);
+      return sum;
+    }, 0);
+    return { items, total_patrimonio: Math.round(total_patrimonio * 100) / 100 };
+  }
+
+  async getInvestimentosMensais(months: number) {
+    const rows = await this.sql<
+      {
+        year: number; month: number; month_name_pt: string;
+        investment_name: string; investment_type: string; investment_subtype: string | null;
+        movement_type: string; num_movimentacoes: number; total_bruto: string; total_liquido: string;
+      }[]
+    >`
+      SELECT year, month, month_name_pt, investment_name, investment_type, investment_subtype,
+             movement_type, num_movimentacoes, total_bruto, total_liquido
+      FROM cube_investimentos_mensal
+      WHERE (year * 100 + month) >= (
+        SELECT year * 100 + month FROM cube_investimentos_mensal ORDER BY year DESC, month DESC LIMIT 1 OFFSET ${months - 1}
+      )
+      ORDER BY year, month
+    `;
+    return rows.map(r => ({
+      ...r,
+      total_bruto:   Number(r.total_bruto),
+      total_liquido: Number(r.total_liquido),
+    }));
+  }
+
+  async getDigestMensal(year: number, month: number) {
+    const rows = await this.sql<
+      {
+        year: number; month: number;
+        cashflow_real: string | null; debt_inflows: string | null; debt_payments: string | null;
+        narrative_pt: string | null; structured_summary: unknown | null;
+        flags: string[] | null; notable_expenses: unknown | null;
+        enrichment_coverage: string | null; model_version: string | null; digest_at: string;
+      }[]
+    >`
+      SELECT year, month, cashflow_real, debt_inflows, debt_payments,
+             narrative_pt, structured_summary, flags, notable_expenses,
+             enrichment_coverage, model_version, digest_at
+      FROM ai_monthly_digest
+      WHERE year = ${year} AND month = ${month}
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      cashflow_real:        row.cashflow_real        !== null ? Number(row.cashflow_real)        : null,
+      debt_inflows:         row.debt_inflows         !== null ? Number(row.debt_inflows)         : null,
+      debt_payments:        row.debt_payments        !== null ? Number(row.debt_payments)        : null,
+      enrichment_coverage:  row.enrichment_coverage  !== null ? Number(row.enrichment_coverage)  : null,
+    };
+  }
+
+  async getTransacoesMensais(year: number, month: number, limit: number, offset: number) {
+    const [items, countRows] = await Promise.all([
+      this.sql<
+        {
+          transaction_id: string; date_day: string; description: string;
+          category_pt: string | null; category_group_pt: string | null;
+          amount_signed: string; transaction_kind: string; owner_normalized: string;
+          merchant_name: string | null; is_recurring: boolean | null;
+          anomaly_score: string | null; tags: string[] | null;
+        }[]
+      >`
+        SELECT t.transaction_id, t.date_day, t.description,
+               t.category_pt, t.category_group_pt,
+               t.amount_signed, t.transaction_kind, t.owner_normalized,
+               ai.merchant_name, ai.is_recurring, ai.anomaly_score, ai.tags
+        FROM f_transacoes t
+        LEFT JOIN ai_transaction_insights ai ON ai.transaction_id = t.transaction_id
+        WHERE EXTRACT(YEAR  FROM t.date_day) = ${year}
+          AND EXTRACT(MONTH FROM t.date_day) = ${month}
+        ORDER BY t.date_day DESC, t.transaction_id
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      this.sql<[{ count: string }]>`
+        SELECT COUNT(*) AS count
+        FROM f_transacoes
+        WHERE EXTRACT(YEAR  FROM date_day) = ${year}
+          AND EXTRACT(MONTH FROM date_day) = ${month}
+      `,
+    ]);
+    return {
+      items: items.map(r => ({
+        ...r,
+        amount_signed:  Number(r.amount_signed),
+        anomaly_score:  r.anomaly_score !== null ? Number(r.anomaly_score) : null,
+      })),
+      total: parseInt(countRows[0]?.count ?? "0", 10),
+    };
+  }
+
+  async getMesesDisponiveis(): Promise<string[]> {
+    const rows = await this.sql<{ year: number; month: number }[]>`
+      SELECT DISTINCT year, month
+      FROM cube_cashflow_mensal
+      ORDER BY year DESC, month DESC
+    `;
+    return rows.map(r => `${r.year}-${String(r.month).padStart(2, "0")}`);
+  }
+
   async close(): Promise<void> {
     await this.sql.close();
   }
