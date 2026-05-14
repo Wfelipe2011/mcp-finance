@@ -84,6 +84,10 @@ export class BunPgAdapter {
   readonly enrichTransactions: EnrichTransactionsRepository;
   readonly aiInsights: AiInsightsRepository;
   readonly aiDigests: AiDigestsRepository;
+  readonly users: {
+    getAll(): Promise<{ id: number; name: string; display_name: string }[]>;
+    updateDisplayName(id: number, displayName: string): Promise<{ id: number; name: string; display_name: string } | null>;
+  };
 
   constructor() {
     const url = process.env["DATABASE_URL"];
@@ -328,6 +332,16 @@ export class BunPgAdapter {
       async enrich(): Promise<void> {
         await sql.begin(async (tx) => {
           await tx`TRUNCATE transactions_enriched`;
+          // Seed d_users from Pluggy identity data (ON CONFLICT DO NOTHING preserves display_name customizations)
+          await tx`
+            INSERT INTO d_users (name, display_name)
+            SELECT
+              LOWER(TRIM(full_name)),
+              initcap(split_part(full_name, ' ', 1))
+            FROM identities
+            WHERE full_name IS NOT NULL AND TRIM(full_name) != ''
+            ON CONFLICT (name) DO NOTHING
+          `;
           await tx`
             INSERT INTO transactions_enriched
             WITH deduplicated AS (
@@ -592,6 +606,24 @@ export class BunPgAdapter {
             model_version       = EXCLUDED.model_version,
             digest_at           = NOW()
         `;
+      },
+    };
+
+    // ── users ─────────────────────────────────────────────────────────────────
+    this.users = {
+      async getAll() {
+        return sql<{ id: number; name: string; display_name: string }[]>`
+          SELECT id, name, display_name FROM d_users ORDER BY id
+        `;
+      },
+      async updateDisplayName(id: number, displayName: string) {
+        const trimmed = displayName.trim();
+        if (!trimmed || trimmed.length > 50) return null;
+        const rows = await sql<{ id: number; name: string; display_name: string }[]>`
+          UPDATE d_users SET display_name = ${trimmed} WHERE id = ${id}
+          RETURNING id, name, display_name
+        `;
+        return rows[0] ?? null;
       },
     };
   }

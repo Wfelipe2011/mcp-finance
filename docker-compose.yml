@@ -1,16 +1,31 @@
 services:
+  auth:
+    build: ./auth/app
+    environment:
+      PLUGGY_EMAIL: ${PLUGGY_EMAIL}
+      PLUGGY_PASSWORD: ${PLUGGY_PASSWORD}
+      GMAIL_LINK_SENDER: no-reply@pluggy.ai
+      PORT: "3000"
+    volumes:
+      - ./auth/data:/app/data
+      - ./auth/screenshots:/app/screenshots
+    restart: unless-stopped
+
   api-server:
     build: .
     ports:
       - "3001:3001"
     environment:
       DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      TOKEN_URL: http://auth:3000/token
       AI_BASE_URL: ${AI_BASE_URL}
       AI_MODEL: ${AI_MODEL}
       PORT: "3001"
     depends_on:
       postgres:
         condition: service_healthy
+      auth:
+        condition: service_started
     restart: unless-stopped
 
   postgres:

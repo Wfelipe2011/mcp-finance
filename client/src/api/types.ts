@@ -1,3 +1,9 @@
+export interface User {
+  id: number;
+  name: string;
+  display_name: string;
+}
+
 export interface CashflowMensal {
   year: number;
   month: number;

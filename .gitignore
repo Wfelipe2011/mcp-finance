@@ -42,3 +42,7 @@ openspec
 # VS Code MCP config (contains credentials)
 .vscode/mcp.json
 .github
+
+# Auth service runtime data
+auth/data/
+auth/screenshots/

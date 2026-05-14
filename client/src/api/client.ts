@@ -9,12 +9,23 @@ import type {
   Digest,
   TransacoesResponse,
   Tendencias,
+  User,
 } from "./types.ts";
 
 const BASE = "";
 
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("authToken");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function get<T>(url: string): Promise<T> {
-  const res = await fetch(BASE + url);
+  const res = await fetch(BASE + url, { headers: authHeaders() });
+  if (res.status === 401) {
+    localStorage.removeItem("authToken");
+    window.location.reload();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((body as { error?: string }).error ?? res.statusText);
@@ -64,4 +75,58 @@ export function fetchTransacoes(month: string, limit = 50, offset = 0): Promise<
 
 export function fetchTendencias(): Promise<Tendencias> {
   return get<Tendencias>("/api/tendencias");
+}
+
+export interface SyncSummary {
+  items: number;
+  accounts: number;
+  transactions: number;
+  investments: number;
+  durationMs: number;
+}
+
+export async function triggerSync(): Promise<SyncSummary> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: authHeaders(),
+      signal: controller.signal,
+    });
+    if (res.status === 401) {
+      localStorage.removeItem("authToken");
+      window.location.reload();
+      throw new Error("Unauthorized");
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((body as { error?: string }).error ?? res.statusText);
+    }
+    return res.json() as Promise<SyncSummary>;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export function fetchUsers(): Promise<User[]> {
+  return get<User[]>("/api/users");
+}
+
+export async function updateUserDisplayName(id: number, displayName: string): Promise<User> {
+  const res = await fetch(`/api/users/${id}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("authToken");
+    window.location.reload();
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<User>;
 }

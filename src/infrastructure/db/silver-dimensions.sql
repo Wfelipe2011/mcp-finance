@@ -12,10 +12,7 @@ CREATE TABLE IF NOT EXISTS d_users (
   display_name TEXT NOT NULL
 );
 
-INSERT INTO d_users (name, display_name) VALUES
-  ('wilson felipe da silva',             'Wilson'),
-  ('giulia cristina rodrigues de souza', 'Giulia')
-ON CONFLICT (name) DO NOTHING;
+-- d_users is populated dynamically during the enrich step from Pluggy identity data.
 
 -- ────────────────────────────────────────────────
 -- d_data  (view de calendário — extraída das transações reais)

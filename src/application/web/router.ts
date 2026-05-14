@@ -9,10 +9,17 @@ import { handleDigest } from "./routes/digest.ts";
 import { handleTransacoes } from "./routes/transacoes.ts";
 import { handleMeses } from "./routes/meses.ts";
 import { handleTendencias } from "./routes/tendencias.ts";
+import { handleLogin } from "./routes/auth.ts";
+import { handleSync } from "./routes/sync.ts";
+import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
 
 export async function router(req: Request, url: URL): Promise<Response> {
   const path = url.pathname;
 
+  if (path === "/api/auth/login" && req.method === "POST") return handleLogin(req);
+  if (path === "/api/sync" && req.method === "POST") return handleSync(req);
+  if (path === "/api/users" && req.method === "GET") return handleGetUsers(req);
+  if (path.startsWith("/api/users/") && req.method === "PATCH") return handleUpdateUser(req, url);
   if (path === "/api/cashflow" && req.method === "GET") return handleCashflow(req, url);
   if (path === "/api/cashflow/projetado" && req.method === "GET") return handleCashflowProjetado(req, url);
   if (path === "/api/gastos" && req.method === "GET") return handleGastos(req, url);

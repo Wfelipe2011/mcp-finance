@@ -10,7 +10,7 @@ export class TokenHttpAdapter implements TokenPort {
   private readonly url: string;
 
   constructor() {
-    this.url = process.env["TOKEN_URL"] ?? "http://192.168.0.194:4567/token";
+    this.url = process.env["TOKEN_URL"] ?? "http://auth:3000/token";
   }
 
   async getToken(): Promise<string> {
