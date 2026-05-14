@@ -142,3 +142,90 @@ GROUP BY
   TO_CHAR(fi.date_day, 'TMMonth'),
   fi.investment_name, fi.investment_type, fi.investment_subtype, fi.movement_type
 ORDER BY year, month;
+
+-- ────────────────────────────────────────────────
+-- cube_compromissos_ativos
+-- Passivo de parcelamentos em aberto por compra
+-- Grain: (description, purchase_day, amount, account_id) — uma linha por compra parcelada não quitada
+-- Decisão D2: agrupa por DATE(cc_purchase_date) para evitar overcounting de timestamps por parcela
+-- Decisão D3: compromisso_restante = (MAX(total) - MAX(installment_number)) * amount
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW cube_compromissos_ativos AS
+SELECT
+  fp.description,
+  DATE(fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo')
+                                                              AS purchase_day,
+  fp.amount,
+  fp.account_id,
+  a.name                                                      AS cartao,
+  du.display_name                                             AS dono,
+  fp.category_pt,
+  fp.category_group_pt,
+  MAX(fp.cc_installment_number)                               AS installment_atual,
+  MAX(fp.cc_total_installments)                               AS total_installments,
+  ROUND(
+    (MAX(fp.cc_total_installments) - MAX(fp.cc_installment_number))::NUMERIC * fp.amount,
+    2
+  )                                                           AS compromisso_restante
+FROM (
+  SELECT
+    te.description,
+    te.cc_purchase_date,
+    te.amount,
+    te.account_id,
+    te.cc_installment_number,
+    te.cc_total_installments,
+    te.category_pt,
+    te.category_group_pt,
+    te.owner_normalized
+  FROM transactions_enriched te
+  WHERE te.cc_total_installments IS NOT NULL
+    AND te.transaction_kind = 'EXPENSE'
+) fp
+INNER JOIN accounts  a  ON a.id      = fp.account_id
+INNER JOIN d_users   du ON du.name   = fp.owner_normalized
+GROUP BY
+  fp.description,
+  DATE(fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo'),
+  fp.amount,
+  fp.account_id,
+  a.name,
+  du.display_name,
+  fp.category_pt,
+  fp.category_group_pt
+HAVING MAX(fp.cc_installment_number) < MAX(fp.cc_total_installments)
+ORDER BY compromisso_restante DESC;
+
+-- ────────────────────────────────────────────────
+-- cube_gastos_novos
+-- Gastos pela ótica da decisão de compra (exclui rastro de parcelamentos)
+-- Grain: (year, month, category_pt, group_pt, display_name) — igual a cube_gastos_mensais
+-- Decisão D4: inclui parcela 1 (compra nova parcelada) + compras à vista (IS NULL ou = 1)
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW cube_gastos_novos AS
+SELECT
+  dd.year,
+  dd.month,
+  dd.month_name_pt,
+  COALESCE(dc.group_pt,    fc.category_group_pt, 'Sem Grupo')      AS group_pt,
+  COALESCE(dc.category_pt, fc.category_pt,       'Sem Categoria')  AS category_pt,
+  du.display_name,
+  COUNT(*)                                                          AS num_transacoes,
+  ROUND(SUM(ABS(fc.amount_signed))::NUMERIC, 2)                     AS total_gastos
+FROM f_fluxo_caixa fc
+INNER JOIN d_data      dd ON dd.data        = fc.date_day
+INNER JOIN d_users     du ON du.id          = fc.user_id
+LEFT  JOIN d_categoria dc ON dc.category_id = fc.category_id
+-- join back to bronze for installment fields (not exposed in f_fluxo_caixa)
+INNER JOIN transactions_enriched te ON te.id = fc.transaction_id
+WHERE fc.transaction_kind = 'EXPENSE'
+  AND (
+    te.cc_installment_number = 1
+    OR te.cc_total_installments IS NULL
+    OR te.cc_total_installments = 1
+  )
+GROUP BY
+  dd.year, dd.month, dd.month_name_pt,
+  COALESCE(dc.group_pt,    fc.category_group_pt, 'Sem Grupo'),
+  COALESCE(dc.category_pt, fc.category_pt,       'Sem Categoria'),
+  du.display_name;

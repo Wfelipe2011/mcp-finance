@@ -34,6 +34,42 @@ FROM transactions_enriched te
 INNER JOIN d_users u ON u.name = te.owner_normalized;
 
 -- ────────────────────────────────────────────────
+-- f_parcelas  (subset: transações com campos de parcelamento estruturado)
+-- Grain: (transaction_id) — uma linha por parcela registrada pelo Pluggy
+-- Inclui colunas derivadas para classificação de parcelamento
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW f_parcelas AS
+SELECT
+  te.id                                               AS transaction_id,
+  te.account_id,
+  u.id                                                AS user_id,
+  te.category_id,
+  -- data normalizada para timezone BRT (igual a f_transacoes)
+  (te.date::TIMESTAMP AT TIME ZONE 'UTC'
+    AT TIME ZONE 'America/Sao_Paulo')::DATE           AS date_day,
+  -- data original da compra (pode diferir da data de cobrança da parcela)
+  (te.cc_purchase_date::TIMESTAMP AT TIME ZONE 'UTC'
+    AT TIME ZONE 'America/Sao_Paulo')::DATE           AS purchase_day,
+  te.amount                                           AS amount,
+  te.transaction_kind,
+  te.is_real_cashflow,
+  te.description,
+  te.category_pt,
+  te.category_group,
+  te.category_group_pt,
+  te.owner_normalized,
+  -- campos estruturados de parcelamento
+  te.cc_installment_number                            AS installment_number,
+  te.cc_total_installments                            AS total_installments,
+  -- colunas derivadas
+  TRUE                                                AS is_installment,
+  (te.cc_installment_number = 1)                      AS is_first_installment,
+  (te.cc_total_installments - te.cc_installment_number) AS installments_remaining
+FROM transactions_enriched te
+INNER JOIN d_users u ON u.name = te.owner_normalized
+WHERE te.cc_total_installments IS NOT NULL;
+
+-- ────────────────────────────────────────────────
 -- f_fluxo_caixa  (subset: apenas transações de caixa real)
 -- ────────────────────────────────────────────────
 CREATE OR REPLACE VIEW f_fluxo_caixa AS
