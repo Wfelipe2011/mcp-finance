@@ -12,6 +12,54 @@ import type { Transaction } from "../../domain/entities/Transaction.ts";
 import type { Investment } from "../../domain/entities/Investment.ts";
 import type { InvestmentTransaction } from "../../domain/entities/InvestmentTransaction.ts";
 import type { Identity } from "../../domain/entities/Identity.ts";
+import type { TransactionInsight } from "../ai/schemas/TransactionInsightSchema.ts";
+import type { MonthlyDigest } from "../ai/schemas/MonthlyDigestSchema.ts";
+
+export interface UnenrichedTransaction {
+  transaction_id: string;
+  description: string;
+  amount_signed: number;
+  transaction_kind: string;
+  category_pt: string | null;
+  category_group_pt: string | null;
+}
+
+export interface InsightRow extends TransactionInsight {
+  transaction_id: string;
+  model_version: string;
+}
+
+export interface MonthInsightRow {
+  transaction_id: string;
+  amount_signed: number;
+  transaction_kind: string;
+  is_debt_related: boolean;
+  merchant_name: string | null;
+  tags: string[];
+  anomaly_score: number | null;
+  description: string;
+}
+
+export interface DigestRow extends MonthlyDigest {
+  year: number;
+  month: number;
+  cashflow_real: number;
+  debt_inflows: number;
+  debt_payments: number;
+  enrichment_coverage: number;
+  model_version: string;
+}
+
+export interface AiInsightsRepository {
+  getUnenriched(limit: number): Promise<UnenrichedTransaction[]>;
+  upsertOne(row: InsightRow): Promise<void>;
+}
+
+export interface AiDigestsRepository {
+  getMonthInsights(year: number, month: number): Promise<MonthInsightRow[]>;
+  getTotalTransactionCount(year: number, month: number): Promise<number>;
+  upsert(row: DigestRow): Promise<void>;
+}
 
 export class BunPgAdapter {
   private readonly sql: SQL;
@@ -23,6 +71,8 @@ export class BunPgAdapter {
   readonly investmentTransactions: InvestmentTransactionRepository;
   readonly identities: IdentityRepository;
   readonly enrichTransactions: EnrichTransactionsRepository;
+  readonly aiInsights: AiInsightsRepository;
+  readonly aiDigests: AiDigestsRepository;
 
   constructor() {
     const url = process.env["DATABASE_URL"];
@@ -379,6 +429,125 @@ export class BunPgAdapter {
             WHERE co.id = matched.id
           `;
         });
+      },
+    };
+
+    // ── aiInsights ────────────────────────────────────────────────────────────
+    this.aiInsights = {
+      async getUnenriched(limit: number): Promise<UnenrichedTransaction[]> {
+        const rows = await sql<UnenrichedTransaction[]>`
+          SELECT
+            t.transaction_id,
+            t.description,
+            t.amount_signed,
+            t.transaction_kind,
+            t.category_pt,
+            t.category_group_pt
+          FROM f_transacoes t
+          WHERE NOT EXISTS (
+            SELECT 1 FROM ai_transaction_insights ai WHERE ai.transaction_id = t.transaction_id
+          )
+          ORDER BY t.date_day ASC
+          LIMIT ${limit}
+        `;
+        return rows;
+      },
+
+      async upsertOne(row: InsightRow): Promise<void> {
+        // Bun SQL doesn't auto-serialize JS arrays to Postgres text[] literals
+        const tagsLiteral = row.tags?.length
+          ? "{" + row.tags.map((t) => '"' + t.replace(/"/g, '\\"') + '"').join(",") + "}"
+          : null;
+        await sql`
+          INSERT INTO ai_transaction_insights (
+            transaction_id, merchant_name, merchant_country,
+            is_recurring, recurrence_period, expense_context,
+            is_debt_related, anomaly_score, tags, category_hint,
+            model_version, analyzed_at
+          ) VALUES (
+            ${row.transaction_id}, ${row.merchant_name ?? null}, ${row.merchant_country ?? null},
+            ${row.is_recurring ?? null}, ${row.recurrence_period ?? null}, ${row.expense_context ?? null},
+            ${row.is_debt_related}, ${row.anomaly_score ?? null}, ${tagsLiteral}::text[], ${row.category_hint ?? null},
+            ${row.model_version}, NOW()
+          )
+          ON CONFLICT (transaction_id) DO UPDATE SET
+            merchant_name     = EXCLUDED.merchant_name,
+            merchant_country  = EXCLUDED.merchant_country,
+            is_recurring      = EXCLUDED.is_recurring,
+            recurrence_period = EXCLUDED.recurrence_period,
+            expense_context   = EXCLUDED.expense_context,
+            is_debt_related   = EXCLUDED.is_debt_related,
+            anomaly_score     = EXCLUDED.anomaly_score,
+            tags              = EXCLUDED.tags,
+            category_hint     = EXCLUDED.category_hint,
+            model_version     = EXCLUDED.model_version,
+            analyzed_at       = NOW()
+        `;
+      },
+    };
+
+    // ── aiDigests ─────────────────────────────────────────────────────────────
+    this.aiDigests = {
+      async getMonthInsights(year: number, month: number): Promise<MonthInsightRow[]> {
+        const rows = await sql<MonthInsightRow[]>`
+          SELECT
+            ai.transaction_id,
+            t.amount_signed,
+            t.transaction_kind,
+            ai.is_debt_related,
+            ai.merchant_name,
+            ai.tags,
+            ai.anomaly_score,
+            t.description
+          FROM ai_transaction_insights ai
+          JOIN f_transacoes t ON t.transaction_id = ai.transaction_id
+          WHERE EXTRACT(YEAR  FROM t.date_day) = ${year}
+            AND EXTRACT(MONTH FROM t.date_day) = ${month}
+        `;
+        return rows;
+      },
+
+      async getTotalTransactionCount(year: number, month: number): Promise<number> {
+        const rows = await sql<[{ count: string }]>`
+          SELECT COUNT(*) AS count
+          FROM f_transacoes
+          WHERE EXTRACT(YEAR  FROM date_day) = ${year}
+            AND EXTRACT(MONTH FROM date_day) = ${month}
+        `;
+        return parseInt(rows[0]?.count ?? "0", 10);
+      },
+
+      async upsert(row: DigestRow): Promise<void> {
+        // Bun SQL doesn't auto-serialize JS arrays to Postgres text[] literals
+        const flagsLiteral = row.flags?.length
+          ? "{" + row.flags.map((f) => '"' + f.replace(/"/g, '\\"') + '"').join(",") + "}"
+          : null;
+        await sql`
+          INSERT INTO ai_monthly_digest (
+            year, month,
+            cashflow_real, debt_inflows, debt_payments,
+            narrative_pt, structured_summary,
+            flags, notable_expenses,
+            enrichment_coverage, model_version, digest_at
+          ) VALUES (
+            ${row.year}, ${row.month},
+            ${row.cashflow_real}, ${row.debt_inflows}, ${row.debt_payments},
+            ${row.narrative_pt}, ${JSON.stringify(row.structured_summary)}::jsonb,
+            ${flagsLiteral}::text[], ${JSON.stringify(row.notable_expenses)}::jsonb,
+            ${row.enrichment_coverage}, ${row.model_version}, NOW()
+          )
+          ON CONFLICT (year, month) DO UPDATE SET
+            cashflow_real       = EXCLUDED.cashflow_real,
+            debt_inflows        = EXCLUDED.debt_inflows,
+            debt_payments       = EXCLUDED.debt_payments,
+            narrative_pt        = EXCLUDED.narrative_pt,
+            structured_summary  = EXCLUDED.structured_summary,
+            flags               = EXCLUDED.flags,
+            notable_expenses    = EXCLUDED.notable_expenses,
+            enrichment_coverage = EXCLUDED.enrichment_coverage,
+            model_version       = EXCLUDED.model_version,
+            digest_at           = NOW()
+        `;
       },
     };
   }
