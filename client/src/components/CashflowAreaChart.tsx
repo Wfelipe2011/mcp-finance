@@ -1,3 +1,4 @@
+import { useMediaQuery } from "@mui/material";
 import { LineChart } from "@mui/x-charts/LineChart";
 import type { CashflowProjetado } from "../api/types.ts";
 
@@ -7,6 +8,7 @@ function formatBRLShort(value: number): string {
 }
 
 export function CashflowAreaChart({ data }: { data: CashflowProjetado[] }) {
+  const isMobile = useMediaQuery("(max-width:600px)");
   const xLabels = data.map((row) => row.month_name_pt ?? `${row.year}-${row.month}`);
   const real = data.map((row) => (!row.is_projected ? (row.saldo_liquido ?? null) : null));
   const projetado = data.map((row) => (row.is_projected ? (row.saldo_liquido ?? null) : null));
@@ -32,7 +34,7 @@ export function CashflowAreaChart({ data }: { data: CashflowProjetado[] }) {
         },
       ]}
       height={220}
-      margin={{ left: 60 }}
+      margin={{ left: isMobile ? 48 : 60 }}
     />
   );
 }

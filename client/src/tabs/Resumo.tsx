@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Chip, Paper, Typography } from "@mui/material";
-import { fetchCashflow, fetchRunway } from "../api/client.ts";
-import type { CashflowMensal, Digest, Runway } from "../api/types.ts";
+import { Box, Chip, Paper, Typography } from "@mui/material";
+import { fetchCashflow, fetchPatrimonio, fetchRunway } from "../api/client.ts";
+import type { CashflowMensal, Digest, Patrimonio, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { FlagPills } from "../components/FlagPills.tsx";
@@ -12,6 +12,7 @@ import { formatBRL } from "../utils/format.ts";
 export function Resumo({ month, digest }: { month: string; digest: Digest | null }) {
   const [cashflow, setCashflow] = useState<CashflowMensal | null>(null);
   const [runway, setRunway] = useState<Runway | null>(null);
+  const [patrimonio, setPatrimonio] = useState<Patrimonio | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,10 +22,12 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
     Promise.all([
       fetchCashflow(month),
       fetchRunway().catch(() => null),
+      fetchPatrimonio().catch(() => null),
     ])
-      .then(([cf, rw]) => {
+      .then(([cf, rw, pat]) => {
         setCashflow(cf);
         setRunway(rw);
+        setPatrimonio(pat);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -78,6 +81,34 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
         </div>
         <RunwayIndicator runway={runway} />
       </Paper>
+
+      {patrimonio && (() => {
+        const contasBanco = patrimonio.items.filter(
+          (c) => c.tipo === "BANK" && (c.saldo_atual ?? 0) > 0
+        );
+        const totalBanco = contasBanco.reduce((sum, c) => sum + (c.saldo_atual ?? 0), 0);
+        if (contasBanco.length === 0) return null;
+        return (
+          <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+              Saldo em Conta
+            </Typography>
+            <Typography variant="h4" fontWeight={700} sx={{ mt: 0.5, mb: 1.5 }}>
+              {formatBRL(totalBanco)}
+            </Typography>
+            {contasBanco.map((c) => (
+              <Box key={c.account_id} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {c.banco ?? c.nome}{c.dono ? ` (${c.dono.split(" ")[0]})` : ""}
+                </Typography>
+                <Typography variant="body2" fontWeight={500}>
+                  {formatBRL(c.saldo_atual ?? 0)}
+                </Typography>
+              </Box>
+            ))}
+          </Paper>
+        );
+      })()}
     </div>
   );
 }

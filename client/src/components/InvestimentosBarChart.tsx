@@ -1,3 +1,4 @@
+import { useMediaQuery } from "@mui/material";
 import { BarChart } from "@mui/x-charts/BarChart";
 import type { InvestimentoMensal } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
@@ -9,6 +10,7 @@ interface MonthData {
 }
 
 export function InvestimentosBarChart({ data }: { data: InvestimentoMensal[] }) {
+  const isMobile = useMediaQuery("(max-width:600px)");
   if (data.length === 0) return null;
 
   const grouped = new Map<string, MonthData>();
@@ -45,7 +47,7 @@ export function InvestimentosBarChart({ data }: { data: InvestimentoMensal[] }) 
         },
       ]}
       height={220}
-      margin={{ left: 70 }}
+      margin={{ left: isMobile ? 52 : 70 }}
     />
   );
 }

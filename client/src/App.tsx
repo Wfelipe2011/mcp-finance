@@ -27,8 +27,15 @@ import { fetchDigest } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
 
 export function App() {
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(
+    localStorage.getItem("selectedMonth") ?? ""
+  );
   const [digest, setDigest] = useState<Digest | null>(null);
+
+  const handleMonthChange = (month: string) => {
+    localStorage.setItem("selectedMonth", month);
+    setSelectedMonth(month);
+  };
   const [activeTab, setActiveTab] = useState(0);
   const [colorMode, setColorMode] = useState<"light" | "dark">(
     (localStorage.getItem("colorMode") as "light" | "dark") ?? "light"
@@ -64,7 +71,7 @@ export function App() {
           <div>
             <Typography variant="h6" fontWeight="bold">💰 Finanças Familiar</Typography>
             <div className="mt-2">
-              <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+              <MonthPicker value={selectedMonth} onChange={handleMonthChange} />
             </div>
           </div>
           <IconButton onClick={toggleColorMode} size="small">

@@ -1,6 +1,9 @@
+import { Box, Typography } from "@mui/material";
 import { PieChart } from "@mui/x-charts/PieChart";
 import type { PatrimonioItem } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
+
+const COLORS = ["#1976d2", "#388e3c", "#f57c00", "#7b1fa2", "#c62828"];
 
 export function PatrimonioDonut({ contas }: { contas: PatrimonioItem[] }) {
   const grouped = new Map<string, number>();
@@ -15,19 +18,31 @@ export function PatrimonioDonut({ contas }: { contas: PatrimonioItem[] }) {
     id: i,
     label: tipo === "BANK" ? "Banco" : tipo === "INVESTMENT" ? "Investimento" : tipo,
     value,
+    color: COLORS[i % COLORS.length]!,
   }));
 
   if (data.length === 0) return null;
 
   return (
-    <PieChart
-      series={[{
-        data,
-        innerRadius: 45,
-        valueFormatter: (item) => formatBRL(item.value),
-      }]}
-      height={160}
-      margin={{ right: 120 }}
-    />
+    <Box>
+      <PieChart
+        series={[{
+          data,
+          innerRadius: 45,
+          valueFormatter: (item) => formatBRL(item.value),
+        }]}
+        height={160}
+        margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        slots={{ legend: () => null }}
+      />
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+        {data.map((item) => (
+          <Box key={item.id} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }} />
+            <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </Box>
   );
 }

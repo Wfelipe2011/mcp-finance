@@ -370,6 +370,11 @@ export class BunPgAdapter {
                       SELECT group_id FROM category_groups WHERE name_pt = 'Investimentos'
                     )
                     THEN 'INVEST'
+                  WHEN t.type = 'CREDIT'
+                    AND cg.group_id IN (
+                      SELECT group_id FROM category_groups WHERE name_pt = 'Transferência entre Próprias Contas'
+                    )
+                    THEN 'TRANSFER'
                   WHEN t.type = 'DEBIT' THEN 'EXPENSE'
                   ELSE 'INCOME'
                 END AS transaction_kind
