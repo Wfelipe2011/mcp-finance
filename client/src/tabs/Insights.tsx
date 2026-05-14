@@ -59,7 +59,7 @@ export function Insights({ month, digest }: { month: string; digest: Digest | nu
           )}
         </>
       ) : (
-        <Paper elevation={1} sx={{ borderRadius: 2, p: 2, bgcolor: "grey.50" }}>
+        <Paper elevation={1} sx={{ borderRadius: 2, p: 2, bgcolor: "background.paper" }}>
           <Typography variant="body2" color="text.disabled" fontStyle="italic">
             Análise de IA não disponível para este mês.
           </Typography>
