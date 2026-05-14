@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Metric, Text } from "@tremor/react";
+import { Paper, Typography } from "@mui/material";
 import { fetchPatrimonio, fetchInvestimentos } from "../api/client.ts";
 import type { Patrimonio, InvestimentoMensal } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -34,16 +34,22 @@ export function Investimentos({ month: _month }: { month: string }) {
 
   return (
     <div className="mt-4 space-y-3">
-      <Card>
-        <Text className="text-gray-500 text-xs uppercase tracking-wide">Patrimônio Total</Text>
-        <Metric className="text-blue-700">{formatBRL(patrimonio?.total_patrimonio ?? 0)}</Metric>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+          Patrimônio Total
+        </Typography>
+        <Typography variant="h4" color="primary.main" fontWeight={700}>
+          {formatBRL(patrimonio?.total_patrimonio ?? 0)}
+        </Typography>
         {patrimonio && <PatrimonioDonut contas={patrimonio.items} />}
-      </Card>
+      </Paper>
 
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">Movimentações (últimos 6 meses)</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">
+          Movimentações (últimos 6 meses)
+        </Typography>
         <InvestimentosBarChart data={investimentos} />
-      </Card>
+      </Paper>
     </div>
   );
 }

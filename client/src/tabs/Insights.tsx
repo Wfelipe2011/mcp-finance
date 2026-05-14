@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Text } from "@tremor/react";
+import { Paper, Typography } from "@mui/material";
 import { fetchTransacoes } from "../api/client.ts";
 import type { Digest, Transacao } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -39,42 +39,40 @@ export function Insights({ month, digest }: { month: string; digest: Digest | nu
 
   return (
     <div className="mt-4 space-y-3">
-      {/* Flags + Narrativa IA */}
       {digest ? (
         <>
-          <Card>
-            <Text className="text-sm font-medium text-gray-700">📖 Análise do Mês</Text>
+          <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+            <Typography variant="body2" fontWeight={600} color="text.primary">📖 Análise do Mês</Typography>
             <FlagPills flags={digest.flags} />
             {digest.narrative_pt && (
-              <Text className="text-sm text-gray-700 mt-3 leading-relaxed whitespace-pre-wrap">
+              <Typography variant="body2" color="text.primary" sx={{ mt: 1.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
                 {digest.narrative_pt}
-              </Text>
+              </Typography>
             )}
-          </Card>
+          </Paper>
 
           {digest.notable_expenses && digest.notable_expenses.length > 0 && (
-            <Card>
-              <Text className="text-sm font-medium text-gray-700">📌 Destaques notáveis</Text>
+            <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+              <Typography variant="body2" fontWeight={600} color="text.primary">📌 Destaques notáveis</Typography>
               <NotableExpenses expenses={digest.notable_expenses} />
-            </Card>
+            </Paper>
           )}
         </>
       ) : (
-        <Card className="bg-gray-50">
-          <Text className="text-gray-400 italic text-sm">
+        <Paper elevation={1} sx={{ borderRadius: 2, p: 2, bgcolor: "grey.50" }}>
+          <Typography variant="body2" color="text.disabled" fontStyle="italic">
             Análise de IA não disponível para este mês.
-          </Text>
-          <Text className="text-gray-400 text-xs mt-1">
-            Execute: <code>bun run digest --month {month}</code>
-          </Text>
-        </Card>
+          </Typography>
+          <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
+            Execute: bun run digest --month {month}
+          </Typography>
+        </Paper>
       )}
 
-      {/* Anomalias */}
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">⚡ Anomalias detectadas</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">⚡ Anomalias detectadas</Typography>
         <AnomaliasList transacoes={anomalias} />
-      </Card>
+      </Paper>
     </div>
   );
 }

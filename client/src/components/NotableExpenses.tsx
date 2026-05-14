@@ -1,4 +1,4 @@
-import { Text } from "@tremor/react";
+import { Typography } from "@mui/material";
 import type { NotableExpense } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -10,10 +10,10 @@ export function NotableExpenses({ expenses }: { expenses: NotableExpense[] | nul
       {expenses.map((e, i) => (
         <li key={i} className="border-l-2 border-amber-400 pl-3">
           <div className="flex justify-between items-baseline">
-            <Text className="text-sm font-medium truncate max-w-[70%]">{e.description}</Text>
-            <Text className="text-sm font-semibold">{formatBRL(e.amount)}</Text>
+            <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: "70%" }}>{e.description}</Typography>
+            <Typography variant="body2" fontWeight={600}>{formatBRL(e.amount)}</Typography>
           </div>
-          <Text className="text-xs text-gray-500 mt-0.5">{e.reason}</Text>
+          <Typography variant="caption" color="text.secondary">{e.reason}</Typography>
         </li>
       ))}
     </ul>

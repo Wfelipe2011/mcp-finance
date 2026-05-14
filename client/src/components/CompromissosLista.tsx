@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ProgressBar, Text, Badge } from "@tremor/react";
+import { Button, Chip, LinearProgress, Typography } from "@mui/material";
 import type { Compromisso } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -9,38 +9,45 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
   const [showAll, setShowAll] = useState(false);
 
   if (compromissos.length === 0) {
-    return <Text className="text-gray-400 italic mt-2">Sem parcelas em aberto.</Text>;
+    return (
+      <Typography variant="body2" color="text.disabled" fontStyle="italic" sx={{ mt: 1 }}>
+        Sem parcelas em aberto.
+      </Typography>
+    );
   }
 
   const displayed = showAll ? compromissos : compromissos.slice(0, PREVIEW_COUNT);
 
   return (
     <div className="mt-2 space-y-3">
-      <Text className="text-sm text-gray-600">
-        Total comprometido: <span className="font-semibold text-gray-900">{formatBRL(total)}</span> restante
-      </Text>
+      <Typography variant="body2" color="text.secondary">
+        Total comprometido:{" "}
+        <strong style={{ color: "inherit" }}>{formatBRL(total)}</strong> restante
+      </Typography>
       {displayed.map((c, i) => {
         const progress = Math.round((c.installment_atual / c.total_installments) * 100);
         return (
           <div key={i} className="space-y-1">
             <div className="flex justify-between items-start">
-              <Text className="text-sm truncate max-w-[65%]">{c.description}</Text>
-              <Badge color="gray" size="xs">{c.installment_atual}/{c.total_installments}</Badge>
+              <Typography variant="body2" noWrap sx={{ maxWidth: "65%" }}>{c.description}</Typography>
+              <Chip label={`${c.installment_atual}/${c.total_installments}`} size="small" color="default" />
             </div>
-            <ProgressBar value={progress} color="blue" className="mt-1" />
-            <Text className="text-xs text-gray-500">
+            <LinearProgress variant="determinate" value={progress} color="primary" sx={{ borderRadius: 1 }} />
+            <Typography variant="caption" color="text.secondary">
               {formatBRL(c.compromisso_restante)} restante · {c.dono} · {c.cartao}
-            </Text>
+            </Typography>
           </div>
         );
       })}
       {compromissos.length > PREVIEW_COUNT && (
-        <button
+        <Button
+          size="small"
+          variant="text"
           onClick={() => setShowAll((v) => !v)}
-          className="text-xs text-blue-600 underline"
+          sx={{ p: 0, minWidth: 0 }}
         >
           {showAll ? "ver menos ↑" : `ver todos (${compromissos.length}) ↓`}
-        </button>
+        </Button>
       )}
     </div>
   );

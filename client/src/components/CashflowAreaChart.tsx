@@ -1,30 +1,38 @@
-import { AreaChart } from "@tremor/react";
+import { LineChart } from "@mui/x-charts/LineChart";
 import type { CashflowProjetado } from "../api/types.ts";
-import { formatBRL } from "../utils/format.ts";
 
-interface ChartRow {
-  mes: string;
-  "Cashflow Real": number | null;
-  "Projetado": number | null;
+function formatBRLShort(value: number): string {
+  if (Math.abs(value) >= 1000) return `R$${(value / 1000).toFixed(1)}k`;
+  return `R$${value.toFixed(0)}`;
 }
 
 export function CashflowAreaChart({ data }: { data: CashflowProjetado[] }) {
-  const chartData: ChartRow[] = data.map((row) => ({
-    mes: row.month_name_pt ?? `${row.year}-${row.month}`,
-    "Cashflow Real": row.is_projected ? null : (row.saldo_liquido ?? null),
-    "Projetado":     row.is_projected ? (row.saldo_liquido ?? null) : null,
-  }));
+  const xLabels = data.map((row) => row.month_name_pt ?? `${row.year}-${row.month}`);
+  const real = data.map((row) => (!row.is_projected ? (row.saldo_liquido ?? null) : null));
+  const projetado = data.map((row) => (row.is_projected ? (row.saldo_liquido ?? null) : null));
 
   return (
-    <AreaChart
-      data={chartData}
-      index="mes"
-      categories={["Cashflow Real", "Projetado"]}
-      colors={["blue", "violet"]}
-      valueFormatter={formatBRL}
-      connectNulls
-      className="mt-2 h-48"
-      showLegend
+    <LineChart
+      xAxis={[{ scaleType: "point", data: xLabels }]}
+      yAxis={[{ valueFormatter: formatBRLShort }]}
+      series={[
+        {
+          data: real,
+          label: "Cashflow Real",
+          area: true,
+          connectNulls: false,
+          color: "#1976d2",
+        },
+        {
+          data: projetado,
+          label: "Projetado",
+          area: true,
+          connectNulls: false,
+          color: "#7c3aed",
+        },
+      ]}
+      height={220}
+      margin={{ left: 60 }}
     />
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Metric, Text } from "@tremor/react";
+import { Paper, Typography } from "@mui/material";
 import { fetchCashflow, fetchRunway } from "../api/client.ts";
 import type { CashflowMensal, Digest, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -42,34 +42,31 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
 
   return (
     <div className="mt-4 space-y-3">
-      {/* Cashflow principal */}
-      <Card>
-        <Text className="text-gray-500 text-xs uppercase tracking-wide">Resultado do Mês</Text>
-        <Metric className={isPositive ? "text-emerald-600" : "text-red-600"}>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+          Resultado do Mês
+        </Typography>
+        <Typography variant="h4" color={isPositive ? "success.main" : "error.main"} fontWeight={700}>
           {formatBRL(cashflowReal)}
-        </Metric>
+        </Typography>
         <FlagPills flags={digest?.flags} />
-      </Card>
+      </Paper>
 
-      {/* Narrativa IA */}
       <DigestNarrative narrative={digest?.narrative_pt} />
 
-      {/* Receitas e Despesas */}
-      <Card>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Text className="text-xs text-gray-500">Receitas</Text>
-            <Text className="font-semibold text-emerald-700">{formatBRL(cashflow.total_receitas)}</Text>
+            <Typography variant="caption" color="text.secondary">Receitas</Typography>
+            <Typography variant="body1" fontWeight={600} color="success.dark">{formatBRL(cashflow.total_receitas)}</Typography>
           </div>
           <div>
-            <Text className="text-xs text-gray-500">Despesas</Text>
-            <Text className="font-semibold text-red-700">{formatBRL(cashflow.total_despesas)}</Text>
+            <Typography variant="caption" color="text.secondary">Despesas</Typography>
+            <Typography variant="body1" fontWeight={600} color="error.dark">{formatBRL(cashflow.total_despesas)}</Typography>
           </div>
         </div>
         <RunwayIndicator runway={runway} />
-      </Card>
+      </Paper>
     </div>
   );
 }
-
-

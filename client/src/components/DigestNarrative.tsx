@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, Text } from "@tremor/react";
+import { Button, Paper, Typography } from "@mui/material";
 
 const PREVIEW_LENGTH = 200;
 
@@ -8,9 +8,11 @@ export function DigestNarrative({ narrative }: { narrative: string | null | unde
 
   if (!narrative) {
     return (
-      <Card className="mt-3 bg-gray-50">
-        <Text className="text-gray-400 italic">Análise de IA não disponível para este mês.</Text>
-      </Card>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2, mt: 1.5, bgcolor: "grey.50" }}>
+        <Typography variant="body2" color="text.disabled" fontStyle="italic">
+          Análise de IA não disponível para este mês.
+        </Typography>
+      </Paper>
     );
   }
 
@@ -18,16 +20,20 @@ export function DigestNarrative({ narrative }: { narrative: string | null | unde
   const displayed = expanded || !isLong ? narrative : narrative.slice(0, PREVIEW_LENGTH) + "…";
 
   return (
-    <Card className="mt-3 bg-blue-50">
-      <Text className="text-blue-900 text-sm leading-relaxed whitespace-pre-wrap">{displayed}</Text>
+    <Paper elevation={1} sx={{ borderRadius: 2, p: 2, mt: 1.5, bgcolor: "primary.50" }}>
+      <Typography variant="body2" sx={{ color: "primary.dark", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+        {displayed}
+      </Typography>
       {isLong && (
-        <button
+        <Button
+          size="small"
+          variant="text"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2 text-xs text-blue-600 underline"
+          sx={{ mt: 0.5, p: 0, minWidth: 0 }}
         >
           {expanded ? "ver menos ↑" : "ver mais ↓"}
-        </button>
+        </Button>
       )}
-    </Card>
+    </Paper>
   );
 }

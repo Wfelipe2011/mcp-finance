@@ -1,11 +1,13 @@
-import { Badge, Text } from "@tremor/react";
+import { Chip, Typography } from "@mui/material";
 import type { Runway } from "../api/types.ts";
 
-function runwayColor(months: number | null): "emerald" | "amber" | "red" {
-  if (months === null) return "gray" as "red";
-  if (months > 3) return "emerald";
-  if (months >= 1) return "amber";
-  return "red";
+type ChipColor = "success" | "warning" | "error" | "default";
+
+function runwayColor(months: number | null): ChipColor {
+  if (months === null) return "default";
+  if (months > 3) return "success";
+  if (months >= 1) return "warning";
+  return "error";
 }
 
 export function RunwayIndicator({ runway }: { runway: Runway | null }) {
@@ -17,8 +19,8 @@ export function RunwayIndicator({ runway }: { runway: Runway | null }) {
 
   return (
     <div className="flex items-center gap-2 mt-1">
-      <Text className="text-sm text-gray-600">Fôlego financeiro:</Text>
-      <Badge color={color}>{label}</Badge>
+      <Typography variant="body2" color="text.secondary">Fôlego financeiro:</Typography>
+      <Chip label={label} color={color} size="small" />
     </div>
   );
 }

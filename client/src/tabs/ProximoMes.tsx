@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Text } from "@tremor/react";
+import { Paper, Typography } from "@mui/material";
 import { fetchCashflowProjetado, fetchCompromissos, fetchRunway } from "../api/client.ts";
 import type { CashflowProjetado, Compromisso, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -42,19 +42,19 @@ export function ProximoMes() {
 
   return (
     <div className="mt-4 space-y-3">
-      <Card>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
         <RunwayIndicator runway={runway} />
-      </Card>
+      </Paper>
 
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">Evolução do cashflow</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">Evolução do cashflow</Typography>
         <CashflowAreaChart data={projetado} />
-      </Card>
+      </Paper>
 
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">Compromissos em aberto</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">Compromissos em aberto</Typography>
         <CompromissosLista compromissos={compromissos} total={totalComprometido} />
-      </Card>
+      </Paper>
     </div>
   );
 }

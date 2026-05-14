@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, Metric, Text } from "@tremor/react";
+import { Paper, Typography } from "@mui/material";
 import { fetchGastos } from "../api/client.ts";
 import type { GastosMensais } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -33,26 +33,28 @@ export function Gastos({ month }: { month: string }) {
 
   return (
     <div className="mt-4 space-y-3">
-      <Card>
-        <Text className="text-gray-500 text-xs uppercase tracking-wide">Total Gasto</Text>
-        <Metric className="text-red-600">{formatBRL(totalGasto)}</Metric>
-      </Card>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+          Total Gasto
+        </Typography>
+        <Typography variant="h4" color="error.main" fontWeight={700}>{formatBRL(totalGasto)}</Typography>
+      </Paper>
 
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">Por onde foi</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">Por onde foi</Typography>
         <GruposDonut grupos={data.grupos} />
-      </Card>
+      </Paper>
 
-      <Card>
-        <Text className="text-sm font-medium text-gray-700">Por categoria</Text>
+      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">Por categoria</Typography>
         <CategoriaBarList categorias={data.categorias} />
-      </Card>
+      </Paper>
 
       {data.novos.length > 0 && (
-        <Card>
-          <Text className="text-sm font-medium text-gray-700">🆕 Novos este mês</Text>
+        <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
+          <Typography variant="body2" fontWeight={600} color="text.primary">🆕 Novos este mês</Typography>
           <NovosGastos novos={data.novos} />
-        </Card>
+        </Paper>
       )}
     </div>
   );
