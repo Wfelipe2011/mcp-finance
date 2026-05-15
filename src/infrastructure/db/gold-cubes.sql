@@ -237,13 +237,13 @@ GROUP BY
   du.display_name;
 
 -- ────────────────────────────────────────────────
--- kpi_cash_runway
--- Fôlego financeiro: quantos meses a família sobrevive sem receita
+-- kpi_runway_imediato
+-- Fôlego imediato: quantos meses a família sobrevive sem receita
+-- usando apenas saldo em conta corrente e poupança
 -- Grain: 1 linha (snapshot atual)
--- Fórmula: saldo_liquido (contas correntes + poupança) / media_saidas_90d (3 meses)
--- runway_meses = NULL se não há histórico de despesas (evita divisão por zero)
+-- runway_imediato_meses = NULL se não há histórico de despesas (evita divisão por zero)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW kpi_cash_runway WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW kpi_runway_imediato WITH (security_invoker = true) AS
 WITH saldo_atual AS (
   SELECT COALESCE(SUM(saldo_atual), 0) AS saldo_liquido
   FROM cube_patrimonio
@@ -261,8 +261,51 @@ media_gastos AS (
 SELECT
   sa.saldo_liquido,
   mg.media_saidas_90d,
-  ROUND(sa.saldo_liquido / NULLIF(mg.media_saidas_90d, 0), 1) AS runway_meses
+  ROUND(sa.saldo_liquido / NULLIF(mg.media_saidas_90d, 0), 1) AS runway_imediato_meses
 FROM saldo_atual sa, media_gastos mg;
+
+-- ────────────────────────────────────────────────
+-- kpi_runway_total
+-- Fôlego total: quantos meses a família sobrevive liquidando tudo
+-- usando saldo em conta + todos os investimentos
+-- Grain: 1 linha (snapshot atual)
+-- runway_total_meses = NULL se não há histórico de despesas (evita divisão por zero)
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW kpi_runway_total WITH (security_invoker = true) AS
+WITH saldo_contas AS (
+  SELECT COALESCE(SUM(saldo_atual), 0) AS saldo_liquido
+  FROM cube_patrimonio
+  WHERE subtipo IN ('CHECKING_ACCOUNT', 'SAVINGS_ACCOUNT')
+),
+saldo_investimentos AS (
+  SELECT COALESCE(SUM(i.balance), 0) AS saldo_investimentos
+  FROM investments i
+  JOIN items it ON it.id = i.item_id
+  WHERE it.tenant_id = current_setting('app.tenant_id', true)::UUID
+),
+media_gastos AS (
+  SELECT AVG(total_despesas) AS media_saidas_90d
+  FROM (
+    SELECT total_despesas
+    FROM cube_cashflow_mensal
+    ORDER BY year DESC, month DESC
+    LIMIT 3
+  ) sub
+)
+SELECT
+  sc.saldo_liquido,
+  si.saldo_investimentos,
+  mg.media_saidas_90d,
+  ROUND((sc.saldo_liquido + si.saldo_investimentos) / NULLIF(mg.media_saidas_90d, 0), 1) AS runway_total_meses
+FROM saldo_contas sc, saldo_investimentos si, media_gastos mg;
+
+-- Alias de compatibilidade: kpi_cash_runway aponta para kpi_runway_imediato
+CREATE OR REPLACE VIEW kpi_cash_runway WITH (security_invoker = true) AS
+SELECT
+  saldo_liquido,
+  media_saidas_90d,
+  runway_imediato_meses AS runway_meses
+FROM kpi_runway_imediato;
 
 -- ────────────────────────────────────────────────
 -- cube_cashflow_projetado

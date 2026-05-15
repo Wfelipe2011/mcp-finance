@@ -966,15 +966,23 @@ export class BunPgAdapter {
 
   async getRunway() {
     return this.withTenant(async (q) => {
-      const rows = await q<{ saldo_liquido: string; media_saidas_90d: string | null; runway_meses: string | null }[]>`
-        SELECT saldo_liquido, media_saidas_90d, runway_meses FROM kpi_cash_runway LIMIT 1
-      `;
-      const row = rows[0];
-      if (!row) return null;
+      const [imediato, total] = await Promise.all([
+        q<{ saldo_liquido: string; media_saidas_90d: string | null; runway_imediato_meses: string | null }[]>`
+          SELECT saldo_liquido, media_saidas_90d, runway_imediato_meses FROM kpi_runway_imediato LIMIT 1
+        `,
+        q<{ saldo_investimentos: string; runway_total_meses: string | null }[]>`
+          SELECT saldo_investimentos, runway_total_meses FROM kpi_runway_total LIMIT 1
+        `,
+      ]);
+      const rowI = imediato[0];
+      const rowT = total[0];
+      if (!rowI) return null;
       return {
-        saldo_liquido:    Number(row.saldo_liquido),
-        media_saidas_90d: row.media_saidas_90d !== null ? Number(row.media_saidas_90d) : null,
-        runway_meses:     row.runway_meses     !== null ? Number(row.runway_meses)     : null,
+        saldo_liquido:          Number(rowI.saldo_liquido),
+        saldo_investimentos:    rowT ? Number(rowT.saldo_investimentos) : 0,
+        media_saidas_90d:       rowI.media_saidas_90d !== null ? Number(rowI.media_saidas_90d) : null,
+        runway_imediato_meses:  rowI.runway_imediato_meses !== null ? Number(rowI.runway_imediato_meses) : null,
+        runway_total_meses:     rowT?.runway_total_meses !== null && rowT?.runway_total_meses !== undefined ? Number(rowT.runway_total_meses) : null,
       };
     });
   }

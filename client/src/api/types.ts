@@ -72,8 +72,10 @@ export interface CashflowProjetado {
 
 export interface Runway {
   saldo_liquido: number;
+  saldo_investimentos: number;
   media_saidas_90d: number | null;
-  runway_meses: number | null;
+  runway_imediato_meses: number | null;
+  runway_total_meses: number | null;
 }
 
 export interface PatrimonioItem {
