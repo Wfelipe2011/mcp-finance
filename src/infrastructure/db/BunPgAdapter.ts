@@ -570,42 +570,50 @@ export class BunPgAdapter {
     // ── aiDigests ─────────────────────────────────────────────────────────────
     this.aiDigests = {
       async getMonthInsights(year: number, month: number): Promise<MonthInsightRow[]> {
-        const rows = await sql<MonthInsightRow[]>`
-          SELECT
-            ai.transaction_id,
-            t.amount_signed,
-            t.transaction_kind,
-            ai.is_debt_related,
-            ai.merchant_name,
-            ai.tags,
-            ai.anomaly_score,
-            t.description
-          FROM ai_transaction_insights ai
-          JOIN f_transacoes t ON t.transaction_id = ai.transaction_id
-          WHERE EXTRACT(YEAR  FROM t.date_day) = ${year}
-            AND EXTRACT(MONTH FROM t.date_day) = ${month}
-        `;
-        return rows;
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<MonthInsightRow[]>`
+            SELECT
+              ai.transaction_id,
+              t.amount_signed,
+              t.transaction_kind,
+              ai.is_debt_related,
+              ai.merchant_name,
+              ai.tags,
+              ai.anomaly_score,
+              t.description
+            FROM ai_transaction_insights ai
+            JOIN f_transacoes t ON t.transaction_id = ai.transaction_id
+            WHERE EXTRACT(YEAR  FROM t.date_day) = ${year}
+              AND EXTRACT(MONTH FROM t.date_day) = ${month}
+          `;
+        });
       },
 
       async getTotalTransactionCount(year: number, month: number): Promise<number> {
-        const rows = await sql<[{ count: string }]>`
-          SELECT COUNT(*) AS count
-          FROM f_transacoes
-          WHERE EXTRACT(YEAR  FROM date_day) = ${year}
-            AND EXTRACT(MONTH FROM date_day) = ${month}
-        `;
+        const rows = await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<[{ count: string }]>`
+            SELECT COUNT(*) AS count
+            FROM f_transacoes
+            WHERE EXTRACT(YEAR  FROM date_day) = ${year}
+              AND EXTRACT(MONTH FROM date_day) = ${month}
+          `;
+        });
         return parseInt(rows[0]?.count ?? "0", 10);
       },
 
       async getPreviousDigests(year: number, month: number, limit: number): Promise<PreviousDigestRow[]> {
-        const rows = await sql<PreviousDigestRow[]>`
-          SELECT year, month, cashflow_real, debt_inflows, debt_payments, narrative_pt, flags
-          FROM ai_monthly_digest
-          WHERE (year * 100 + month) < (${year} * 100 + ${month})
-          ORDER BY year DESC, month DESC
-          LIMIT ${limit}
-        `;
+        const rows = await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<PreviousDigestRow[]>`
+            SELECT year, month, cashflow_real, debt_inflows, debt_payments, narrative_pt, flags
+            FROM ai_monthly_digest
+            WHERE (year * 100 + month) < (${year} * 100 + ${month})
+            ORDER BY year DESC, month DESC
+            LIMIT ${limit}
+          `;
+        });
         return rows.reverse(); // cronológico: mais antigo primeiro
       },
 
@@ -1126,6 +1134,99 @@ export class BunPgAdapter {
         })),
       };
     });
+  }
+
+  async getDigestCoverage(year: number, month: number): Promise<{ total: number; enriched: number }> {
+    return this.withTenant(async (q) => {
+      const rows = await q<[{ total: string; enriched: string }]>`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(ai.transaction_id) AS enriched
+        FROM f_transacoes t
+        LEFT JOIN ai_transaction_insights ai ON ai.transaction_id = t.transaction_id
+        WHERE EXTRACT(YEAR  FROM t.date_day) = ${year}
+          AND EXTRACT(MONTH FROM t.date_day) = ${month}
+      `;
+      const row = rows[0]!;
+      return {
+        total:    parseInt(row.total,    10),
+        enriched: parseInt(row.enriched, 10),
+      };
+    });
+  }
+
+  async getDigestData(year: number, month: number) {
+    return this.withTenant(async (q) => {
+      const rows = await q<
+        {
+          year: number; month: number;
+          cashflow_real: string | null; debt_inflows: string | null; debt_payments: string | null;
+          narrative_pt: string | null; structured_summary: unknown | null;
+          flags: string[] | null; notable_expenses: unknown | null;
+          enrichment_coverage: string | null; model_version: string | null; digest_at: string;
+        }[]
+      >`
+        SELECT year, month, cashflow_real, debt_inflows, debt_payments,
+               narrative_pt, structured_summary, flags, notable_expenses,
+               enrichment_coverage, model_version, digest_at
+        FROM ai_monthly_digest
+        WHERE year = ${year} AND month = ${month}
+        LIMIT 1
+      `;
+      const row = rows[0];
+      if (!row) return null;
+      return {
+        ...row,
+        cashflow_real:       row.cashflow_real       !== null ? Number(row.cashflow_real)       : null,
+        debt_inflows:        row.debt_inflows        !== null ? Number(row.debt_inflows)        : null,
+        debt_payments:       row.debt_payments       !== null ? Number(row.debt_payments)       : null,
+        enrichment_coverage: row.enrichment_coverage !== null ? Number(row.enrichment_coverage) : null,
+      };
+    });
+  }
+
+  async upsertDigest(year: number, month: number, data: DigestRow): Promise<void> {
+    const tenantId = this.tenantId;
+    if (!tenantId) throw new Error("upsertDigest requires tenantId");
+    const flagsLiteral = data.flags?.length
+      ? "{" + data.flags.map((f) => '"' + f.replace(/"/g, '\\"') + '"').join(",") + "}"
+      : null;
+    await this.sql.begin(async (tx) => {
+      await tx`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      await tx`
+        INSERT INTO ai_monthly_digest (
+          tenant_id, year, month,
+          cashflow_real, debt_inflows, debt_payments,
+          narrative_pt, structured_summary,
+          flags, notable_expenses,
+          enrichment_coverage, model_version, digest_at
+        ) VALUES (
+          ${tenantId}::uuid, ${year}, ${month},
+          ${data.cashflow_real}, ${data.debt_inflows}, ${data.debt_payments},
+          ${data.narrative_pt}, ${JSON.stringify(data.structured_summary)}::jsonb,
+          ${flagsLiteral}::text[], ${JSON.stringify(data.notable_expenses)}::jsonb,
+          ${data.enrichment_coverage}, ${data.model_version}, NOW()
+        )
+        ON CONFLICT (tenant_id, year, month) DO UPDATE SET
+          cashflow_real       = EXCLUDED.cashflow_real,
+          debt_inflows        = EXCLUDED.debt_inflows,
+          debt_payments       = EXCLUDED.debt_payments,
+          narrative_pt        = EXCLUDED.narrative_pt,
+          structured_summary  = EXCLUDED.structured_summary,
+          flags               = EXCLUDED.flags,
+          notable_expenses    = EXCLUDED.notable_expenses,
+          enrichment_coverage = EXCLUDED.enrichment_coverage,
+          model_version       = EXCLUDED.model_version,
+          digest_at           = NOW()
+      `;
+    });
+  }
+
+  async getActiveTenantsIds(): Promise<string[]> {
+    const rows = await this.sql<{ id: string }[]>`
+      SELECT id FROM tenants WHERE status = 'active'
+    `;
+    return rows.map((r) => r.id);
   }
 
   async close(): Promise<void> {
