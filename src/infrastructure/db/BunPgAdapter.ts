@@ -4,14 +4,12 @@ import type { AccountRepository } from "../../domain/ports/repositories/AccountR
 import type { TransactionRepository } from "../../domain/ports/repositories/TransactionRepository.ts";
 import type { InvestmentRepository } from "../../domain/ports/repositories/InvestmentRepository.ts";
 import type { InvestmentTransactionRepository } from "../../domain/ports/repositories/InvestmentTransactionRepository.ts";
-import type { IdentityRepository } from "../../domain/ports/repositories/IdentityRepository.ts";
 import type { EnrichTransactionsRepository } from "../../domain/ports/repositories/EnrichTransactionsRepository.ts";
 import type { Item } from "../../domain/entities/Item.ts";
 import type { Account } from "../../domain/entities/Account.ts";
 import type { Transaction } from "../../domain/entities/Transaction.ts";
 import type { Investment } from "../../domain/entities/Investment.ts";
 import type { InvestmentTransaction } from "../../domain/entities/InvestmentTransaction.ts";
-import type { Identity } from "../../domain/entities/Identity.ts";
 import type { TransactionInsight } from "../ai/schemas/TransactionInsightSchema.ts";
 import type { MonthlyDigest } from "../ai/schemas/MonthlyDigestSchema.ts";
 
@@ -80,7 +78,6 @@ export class BunPgAdapter {
   readonly transactions: TransactionRepository;
   readonly investments: InvestmentRepository;
   readonly investmentTransactions: InvestmentTransactionRepository;
-  readonly identities: IdentityRepository;
   readonly enrichTransactions: EnrichTransactionsRepository;
   readonly aiInsights: AiInsightsRepository;
   readonly aiDigests: AiDigestsRepository;
@@ -282,64 +279,19 @@ export class BunPgAdapter {
       },
     };
 
-    // ── identities ────────────────────────────────────────────────────────────
-    this.identities = {
-      async upsertMany(rows: Identity[]): Promise<void> {
-        if (rows.length === 0) return;
-        await sql.begin(async (tx) => {
-          for (const r of rows) {
-            await tx`
-              INSERT INTO identities (
-                id, item_id, full_name, birth_date, tax_number, document, document_type,
-                job_title, company_name, phone_numbers, emails, addresses, relations, investor_profile,
-                establishment_code, establishment_name,
-                fr_start_date, fr_products_services_type, fr_procurators, fr_accounts,
-                qual_company_cnpj, qual_informed_income_amount, qual_informed_income_frequency,
-                qual_informed_income_date, created_at, updated_at, synced_at
-              ) VALUES (
-                ${r.id}, ${r.itemId}, ${r.fullName}, ${r.birthDate}, ${r.taxNumber},
-                ${r.document}, ${r.documentType}, ${r.jobTitle}, ${r.companyName},
-                ${r.phoneNumbers}, ${r.emails}, ${r.addresses}, ${r.relations}, ${r.investorProfile},
-                ${r.establishmentCode}, ${r.establishmentName},
-                ${r.frStartDate}, ${r.frProductsServicesType}, ${r.frProcurators}, ${r.frAccounts},
-                ${r.qualCompanyCnpj}, ${r.qualInformedIncomeAmount}, ${r.qualInformedIncomeFrequency},
-                ${r.qualInformedIncomeDate}, ${r.createdAt}, ${r.updatedAt}, ${r.syncedAt}
-              )
-              ON CONFLICT (id) DO UPDATE SET
-                full_name                      = EXCLUDED.full_name,
-                birth_date                     = EXCLUDED.birth_date,
-                tax_number                     = EXCLUDED.tax_number,
-                phone_numbers                  = EXCLUDED.phone_numbers,
-                emails                         = EXCLUDED.emails,
-                addresses                      = EXCLUDED.addresses,
-                fr_start_date                  = EXCLUDED.fr_start_date,
-                fr_products_services_type      = EXCLUDED.fr_products_services_type,
-                fr_procurators                 = EXCLUDED.fr_procurators,
-                fr_accounts                    = EXCLUDED.fr_accounts,
-                qual_informed_income_amount    = EXCLUDED.qual_informed_income_amount,
-                qual_informed_income_frequency = EXCLUDED.qual_informed_income_frequency,
-                qual_informed_income_date      = EXCLUDED.qual_informed_income_date,
-                updated_at                     = EXCLUDED.updated_at,
-                synced_at                      = EXCLUDED.synced_at
-            `;
-          }
-        });
-      },
-    };
-
     // ── enrichTransactions ────────────────────────────────────────────────────
     this.enrichTransactions = {
       async enrich(): Promise<void> {
         await sql.begin(async (tx) => {
           await tx`TRUNCATE transactions_enriched`;
-          // Seed d_users from Pluggy identity data (ON CONFLICT DO NOTHING preserves display_name customizations)
+          // Seed d_users from accounts.owner (ON CONFLICT DO NOTHING preserves display_name customizations)
           await tx`
             INSERT INTO d_users (name, display_name)
-            SELECT
-              LOWER(TRIM(full_name)),
-              initcap(split_part(full_name, ' ', 1))
-            FROM identities
-            WHERE full_name IS NOT NULL AND TRIM(full_name) != ''
+            SELECT DISTINCT
+              LOWER(TRIM(a.owner)),
+              initcap(split_part(a.owner, ' ', 1))
+            FROM accounts a
+            WHERE a.owner IS NOT NULL AND TRIM(a.owner) != ''
             ON CONFLICT (name) DO NOTHING
           `;
           await tx`

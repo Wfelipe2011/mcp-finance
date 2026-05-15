@@ -133,6 +133,43 @@ export class BrowserAutomation {
     return { success: true, message: 'Login realizado com sucesso', appSession: sessionCookie.value };
   }
 
+  /**
+   * Troca o appSession por um JWT accessToken chamando GET /api/access-token.
+   * Retorna também o novo appSession do set-cookie, se presente.
+   */
+  async exchangeForAccessToken(
+    appSession: string
+  ): Promise<{ accessToken: string; newAppSession?: string }> {
+    const response = await fetch('https://meu.pluggy.ai/api/access-token', {
+      method: 'GET',
+      headers: {
+        Cookie: `appSession=${appSession}`,
+        'User-Agent':
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Referer: 'https://meu.pluggy.ai/',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `[BrowserAutomation] Falha ao trocar appSession por accessToken: HTTP ${response.status}`
+      );
+    }
+
+    const body = (await response.json()) as { accessToken?: string };
+    if (!body.accessToken) {
+      throw new Error(
+        '[BrowserAutomation] accessToken ausente no body da resposta de /api/access-token'
+      );
+    }
+
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const match = setCookie.match(/appSession=([^;]+)/);
+    const newAppSession = match ? match[1] : undefined;
+
+    return { accessToken: body.accessToken, newAppSession };
+  }
+
   async close(): Promise<void> {
     await this.browser?.close();
     this.browser = null;

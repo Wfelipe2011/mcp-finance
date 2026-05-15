@@ -12,7 +12,6 @@ const useCase = new SyncUseCase({
   transactionRepo: db.transactions,
   investmentRepo: db.investments,
   investmentTransactionRepo: db.investmentTransactions,
-  identityRepo: db.identities,
   enrichTransactionRepo: db.enrichTransactions,
 });
 

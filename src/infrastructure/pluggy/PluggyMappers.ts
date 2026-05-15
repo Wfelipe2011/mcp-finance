@@ -3,7 +3,6 @@ import type { Account } from "../../domain/entities/Account.ts";
 import type { Transaction } from "../../domain/entities/Transaction.ts";
 import type { Investment } from "../../domain/entities/Investment.ts";
 import type { InvestmentTransaction } from "../../domain/entities/InvestmentTransaction.ts";
-import type { Identity } from "../../domain/entities/Identity.ts";
 
 const now = () => new Date().toISOString();
 
@@ -169,41 +168,6 @@ type RawInvestmentTransaction = {
   updatedAt?: string | null;
 };
 
-type RawIdentity = {
-  id: string;
-  itemId?: string | null;
-  fullName?: string | null;
-  birthDate?: string | null;
-  taxNumber?: string | null;
-  document?: string | null;
-  documentType?: string | null;
-  jobTitle?: string | null;
-  companyName?: string | null;
-  phoneNumbers?: unknown[] | null;
-  emails?: unknown[] | null;
-  addresses?: unknown[] | null;
-  relations?: unknown;
-  investorProfile?: unknown;
-  establishmentCode?: string | null;
-  establishmentName?: string | null;
-  financialRelationships?: {
-    startDate?: string | null;
-    productsServicesType?: unknown[] | null;
-    procurators?: unknown[] | null;
-    accounts?: unknown[] | null;
-  } | null;
-  qualifications?: {
-    companyCnpj?: string | null;
-    informedIncome?: {
-      amount?: number | null;
-      frequency?: string | null;
-      date?: string | null;
-    } | null;
-  } | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
-
 // ---- Mapper functions ----
 
 export function mapItem(raw: RawItem): Item {
@@ -363,47 +327,6 @@ export function mapInvestmentTransaction(
   };
 }
 
-export function mapIdentity(raw: RawIdentity): Identity {
-  return {
-    id: raw.id,
-    itemId: raw.itemId ?? "",
-    fullName: raw.fullName ?? null,
-    birthDate: raw.birthDate ?? null,
-    taxNumber: raw.taxNumber ?? null,
-    document: raw.document ?? null,
-    documentType: raw.documentType ?? null,
-    jobTitle: raw.jobTitle ?? null,
-    companyName: raw.companyName ?? null,
-    phoneNumbers: raw.phoneNumbers != null ? JSON.stringify(raw.phoneNumbers) : null,
-    emails: raw.emails != null ? JSON.stringify(raw.emails) : null,
-    addresses: raw.addresses != null ? JSON.stringify(raw.addresses) : null,
-    relations: raw.relations != null ? JSON.stringify(raw.relations) : null,
-    investorProfile: raw.investorProfile != null ? JSON.stringify(raw.investorProfile) : null,
-    establishmentCode: raw.establishmentCode ?? null,
-    establishmentName: raw.establishmentName ?? null,
-    frStartDate: raw.financialRelationships?.startDate ?? null,
-    frProductsServicesType:
-      raw.financialRelationships?.productsServicesType != null
-        ? JSON.stringify(raw.financialRelationships.productsServicesType)
-        : null,
-    frProcurators:
-      raw.financialRelationships?.procurators != null
-        ? JSON.stringify(raw.financialRelationships.procurators)
-        : null,
-    frAccounts:
-      raw.financialRelationships?.accounts != null
-        ? JSON.stringify(raw.financialRelationships.accounts)
-        : null,
-    qualCompanyCnpj: raw.qualifications?.companyCnpj ?? null,
-    qualInformedIncomeAmount: raw.qualifications?.informedIncome?.amount ?? null,
-    qualInformedIncomeFrequency: raw.qualifications?.informedIncome?.frequency ?? null,
-    qualInformedIncomeDate: raw.qualifications?.informedIncome?.date ?? null,
-    createdAt: raw.createdAt ?? null,
-    updatedAt: raw.updatedAt ?? null,
-    syncedAt: now(),
-  };
-}
-
 // ---- Type-safe coercion helpers ----
 
 export function asRawItem(v: unknown): RawItem {
@@ -420,7 +343,4 @@ export function asRawInvestment(v: unknown): RawInvestment {
 }
 export function asRawInvestmentTransaction(v: unknown): RawInvestmentTransaction {
   return v as RawInvestmentTransaction;
-}
-export function asRawIdentity(v: unknown): RawIdentity {
-  return v as RawIdentity;
 }

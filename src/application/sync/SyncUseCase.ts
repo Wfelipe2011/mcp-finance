@@ -5,7 +5,6 @@ import type { AccountRepository } from "../../domain/ports/repositories/AccountR
 import type { TransactionRepository } from "../../domain/ports/repositories/TransactionRepository.ts";
 import type { InvestmentRepository } from "../../domain/ports/repositories/InvestmentRepository.ts";
 import type { InvestmentTransactionRepository } from "../../domain/ports/repositories/InvestmentTransactionRepository.ts";
-import type { IdentityRepository } from "../../domain/ports/repositories/IdentityRepository.ts";
 import type { EnrichTransactionsRepository } from "../../domain/ports/repositories/EnrichTransactionsRepository.ts";
 import { PluggyHttpAdapter } from "../../infrastructure/pluggy/PluggyHttpAdapter.ts";
 
@@ -16,7 +15,6 @@ export interface SyncDeps {
   transactionRepo: TransactionRepository;
   investmentRepo: InvestmentRepository;
   investmentTransactionRepo: InvestmentTransactionRepository;
-  identityRepo: IdentityRepository;
   enrichTransactionRepo: EnrichTransactionsRepository;
 }
 
@@ -38,7 +36,7 @@ export class SyncUseCase {
   async run(): Promise<SyncSummary> {
     const start = Date.now();
     const { tokenPort, itemRepo, accountRepo, transactionRepo,
-            investmentRepo, investmentTransactionRepo, identityRepo,
+            investmentRepo, investmentTransactionRepo,
             enrichTransactionRepo } = this.deps;
 
     // 1. Token
@@ -77,14 +75,7 @@ export class SyncUseCase {
     await investmentTransactionRepo.insertMany(allInvTx);
     console.log(`[sync] Investment transactions: ${allInvTx.length}`);
 
-    // 5. Identities (uma por item)
-    console.log("[sync] Fetching identities...");
-    const identityResults = await Promise.all(items.map((i) => pluggy.fetchIdentity(i.id)));
-    const identities = identityResults.filter((id): id is NonNullable<typeof id> => id !== null);
-    await identityRepo.upsertMany(identities);
-    console.log(`[sync] Identities: ${identities.length}`);
-
-    // 6. Enrich transactions (camada bronze)
+    // 5. Enrich transactions (camada bronze)
     console.log("[sync] Enriching transactions...");
     await enrichTransactionRepo.enrich();
     console.log("[sync] Transactions enriched.");

@@ -4,20 +4,17 @@ import type { Account } from "../../domain/entities/Account.ts";
 import type { Transaction } from "../../domain/entities/Transaction.ts";
 import type { Investment } from "../../domain/entities/Investment.ts";
 import type { InvestmentTransaction } from "../../domain/entities/InvestmentTransaction.ts";
-import type { Identity } from "../../domain/entities/Identity.ts";
 import {
   mapItem,
   mapAccount,
   mapTransaction,
   mapInvestment,
   mapInvestmentTransaction,
-  mapIdentity,
   asRawItem,
   asRawAccount,
   asRawTransaction,
   asRawInvestment,
   asRawInvestmentTransaction,
-  asRawIdentity,
 } from "./PluggyMappers.ts";
 
 const BASE_URL = "https://my-api.pluggy.ai";
@@ -135,25 +132,5 @@ export class PluggyHttpAdapter implements PluggyPort {
     }
 
     return results;
-  }
-
-  async fetchIdentity(itemId: string): Promise<Identity | null> {
-    try {
-      const data = await this.get(`/identity/?itemId=${encodeURIComponent(itemId)}`);
-
-      // API may return array or single object
-      if (Array.isArray(data)) {
-        if (data.length === 0) return null;
-        return mapIdentity(asRawIdentity(data[0]));
-      }
-
-      const obj = data as Record<string, unknown>;
-      if (!obj["id"]) return null;
-      return mapIdentity(asRawIdentity(data));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("HTTP 404")) return null;
-      throw err;
-    }
   }
 }

@@ -10,6 +10,7 @@ function getSessionFile(): string {
 
 interface SessionData {
   appSession: string;
+  accessToken: string;
   expiresAt: string; // ISO 8601
 }
 
@@ -32,10 +33,10 @@ function writeStore(store: SessionStore): void {
 }
 
 /**
- * Retorna o appSession armazenado se existir e ainda não tiver expirado.
+ * Retorna { appSession, accessToken } se existir e ainda não tiver expirado.
  * Retorna null se não existir ou se estiver expirado.
  */
-export function getValidSession(email: string): string | null {
+export function getValidSession(email: string): { appSession: string; accessToken: string } | null {
   const store = readStore();
   const entry = store[email];
   if (!entry) return null;
@@ -43,15 +44,15 @@ export function getValidSession(email: string): string | null {
   const isExpired = new Date(entry.expiresAt) <= new Date();
   if (isExpired) return null;
 
-  return entry.appSession;
+  return { appSession: entry.appSession, accessToken: entry.accessToken };
 }
 
 /**
  * Salva (ou atualiza) a sessão do usuário com validade de 1 dia a partir de agora.
  */
-export function saveSession(email: string, appSession: string): void {
+export function saveSession(email: string, appSession: string, accessToken: string): void {
   const store = readStore();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  store[email] = { appSession, expiresAt };
+  store[email] = { appSession, accessToken, expiresAt };
   writeStore(store);
 }

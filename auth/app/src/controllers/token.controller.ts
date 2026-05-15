@@ -25,7 +25,7 @@ export async function tokenHandler(
     const expiresAt = new Date(savedAt.getTime() + 24 * 60 * 60 * 1000);
 
     res.status(200).json({
-      token: result.appSession,
+      token: result.accessToken,
       saved_at: savedAt.toISOString(),
       expires_at: expiresAt.toISOString(),
     });

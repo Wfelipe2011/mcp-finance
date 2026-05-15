@@ -49,6 +49,10 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/infrastructure/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./src/infrastructure/db/silver-dimensions.sql:/docker-entrypoint-initdb.d/02-silver-dimensions.sql:ro
+      - ./src/infrastructure/db/gold-ai.sql:/docker-entrypoint-initdb.d/03-gold-ai.sql:ro
+      - ./src/infrastructure/db/silver-facts.sql:/docker-entrypoint-initdb.d/04-silver-facts.sql:ro
+      - ./src/infrastructure/db/gold-cubes.sql:/docker-entrypoint-initdb.d/05-gold-cubes.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s

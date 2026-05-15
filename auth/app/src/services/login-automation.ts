@@ -1,15 +1,15 @@
 import { BrowserAutomation } from '../integrations/browser';
 import { GmailReader } from '../integrations/gmail';
 import { getValidSession, saveSession } from '../integrations/session-store';
-import { AutomationResult, LoginRequest } from '../types';
+import { LoginRequest } from '../types';
 
 export class LoginAutomationService {
-  async execute({ email, appPassword }: LoginRequest): Promise<AutomationResult> {
+  async execute({ email, appPassword }: LoginRequest): Promise<{ success: boolean; message: string; accessToken: string }> {
     // Sessão válida em cache — retorna sem rodar o fluxo de automação
     const cached = getValidSession(email);
     if (cached) {
-      console.log('[LoginAutomation] Sessão válida encontrada em cache, retornando appSession armazenado');
-      return { success: true, message: 'Sessão reutilizada do cache', appSession: cached };
+      console.log('[LoginAutomation] Sessão válida encontrada em cache, retornando accessToken armazenado');
+      return { success: true, message: 'Sessão reutilizada do cache', accessToken: cached.accessToken };
     }
 
     const browser = new BrowserAutomation();
@@ -28,17 +28,28 @@ export class LoginAutomationService {
         );
       }
 
-      let result: AutomationResult;
+      let loginResult: { appSession: string };
       try {
-        result = await browser.navigateToMagicLink(magicLink);
+        loginResult = await browser.navigateToMagicLink(magicLink);
       } catch (err) {
         throw new Error(
           `[LoginAutomation] Falha ao navegar para o magic link: ${(err as Error).message}`
         );
       }
 
-      saveSession(email, result.appSession);
-      return result;
+      let exchangeResult: { accessToken: string; newAppSession?: string };
+      try {
+        exchangeResult = await browser.exchangeForAccessToken(loginResult.appSession);
+      } catch (err) {
+        throw new Error(
+          `[LoginAutomation] Falha ao trocar appSession por accessToken: ${(err as Error).message}`
+        );
+      }
+
+      const finalAppSession = exchangeResult.newAppSession ?? loginResult.appSession;
+      saveSession(email, finalAppSession, exchangeResult.accessToken);
+
+      return { success: true, message: 'Login realizado com sucesso', accessToken: exchangeResult.accessToken };
     } finally {
       await browser.close();
     }

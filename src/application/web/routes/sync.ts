@@ -14,7 +14,6 @@ export async function handleSync(_req: Request): Promise<Response> {
       transactionRepo: db.transactions,
       investmentRepo: db.investments,
       investmentTransactionRepo: db.investmentTransactions,
-      identityRepo: db.identities,
       enrichTransactionRepo: db.enrichTransactions,
     });
     const summary = await useCase.run();

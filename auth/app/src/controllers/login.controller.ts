@@ -24,7 +24,6 @@ export async function loginHandler(
     res.status(200).json({
       success: result.success,
       message: result.message,
-      appSession: result.appSession,
     } satisfies LoginResponse);
   } catch (err) {
     next(err);
