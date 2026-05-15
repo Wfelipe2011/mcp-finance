@@ -24,6 +24,7 @@ export interface SyncSummary {
   transactions: number;
   investments: number;
   durationMs: number;
+  transactionIds: string[];
 }
 
 export class SyncUseCase {
@@ -88,6 +89,7 @@ export class SyncUseCase {
       transactions: allTx.length,
       investments: investments.length,
       durationMs: Date.now() - start,
+      transactionIds: allTx.map((t) => t.id),
     };
   }
 }

@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "sync": "bun run src/scripts/sync.ts",
-    "enrich": "bun run src/scripts/enrich.ts",
     "digest": "bun run src/scripts/digest.ts",
+    "worker": "bun run src/application/workers/enrich-worker.ts",
     "web:dev": "bun run src/application/web/server.ts",
     "web:start": "bun run src/application/web/server.ts",
     "supervisor": "bun run src/application/supervisor/supervisor.ts",

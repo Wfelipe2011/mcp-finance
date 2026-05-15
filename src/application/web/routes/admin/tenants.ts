@@ -3,10 +3,18 @@ import { BunPgAdapter } from "../../../../infrastructure/db/BunPgAdapter.ts";
 import { requireSuperAdmin } from "../../auth-middleware.ts";
 import { jsonResponse, errorResponse } from "../../helpers.ts";
 
-const ALLOWED_STATUSES = new Set(["active", "suspended", "inactive"]);
+const ALLOWED_INPUT_STATUSES = new Set(["active", "inactive"]);
 
-function normalizeStatus(status: string): string {
+function normalizeStatusForDb(status: string): string {
   return status === "inactive" ? "suspended" : status;
+}
+
+function normalizeStatusForResponse(status: string): string {
+  return status === "suspended" ? "inactive" : status;
+}
+
+function normalizeTenantResponse(tenant: Record<string, unknown>): Record<string, unknown> {
+  return { ...tenant, status: normalizeStatusForResponse(tenant.status as string) };
 }
 
 export async function handleListTenants(req: Request): Promise<Response> {
@@ -15,7 +23,7 @@ export async function handleListTenants(req: Request): Promise<Response> {
 
   const db = new BunPgAdapter();
   const tenants = await db.tenants.findAll();
-  return jsonResponse(tenants);
+  return jsonResponse(tenants.map(normalizeTenantResponse));
 }
 
 export async function handleCreateTenant(req: Request): Promise<Response> {
@@ -36,8 +44,8 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
   }
 
   const { name, email, password, pluggy_email, pluggy_password } = body;
-  if (!name || !email || !password) {
-    return errorResponse("name, email e password são obrigatórios", 400);
+  if (!name || !email || !password || !pluggy_email || !pluggy_password) {
+    return errorResponse("Campos obrigatórios: name, email, password, pluggy_email, pluggy_password", 400);
   }
 
   const password_hash = await hash(password, 10);
@@ -48,10 +56,10 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
       name,
       email,
       password_hash,
-      pluggy_email: pluggy_email ?? null,
-      pluggy_password: pluggy_password ?? null,
+      pluggy_email,
+      pluggy_password,
     });
-    return jsonResponse(tenant, 201);
+    return jsonResponse(normalizeTenantResponse(tenant as unknown as Record<string, unknown>), 201);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("tenants_email_key") || msg.includes("unique")) {
@@ -76,14 +84,14 @@ export async function handleToggleTenantStatus(req: Request, url: URL): Promise<
   }
 
   const rawStatus = body.status ?? "";
-  if (!ALLOWED_STATUSES.has(rawStatus)) {
-    return errorResponse("Status inválido", 400);
+  if (!ALLOWED_INPUT_STATUSES.has(rawStatus)) {
+    return errorResponse("Status deve ser active ou inactive", 400);
   }
 
-  const status = normalizeStatus(rawStatus);
+  const status = normalizeStatusForDb(rawStatus);
   const db = new BunPgAdapter();
   const tenant = await db.tenants.setStatus(id, status);
   if (!tenant) return errorResponse("Tenant não encontrado", 404);
 
-  return jsonResponse(tenant);
+  return jsonResponse(normalizeTenantResponse(tenant as unknown as Record<string, unknown>));
 }

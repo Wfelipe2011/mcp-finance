@@ -17,7 +17,9 @@ export async function handleSync(_req: Request, tenantId: string): Promise<Respo
       enrichTransactionRepo: db.enrichTransactions,
     });
     const summary = await useCase.run();
-    return jsonResponse(summary);
+    const enrichQueued = await db.enrich_jobs.enqueue(tenantId, summary.transactionIds);
+    const { transactionIds: _, ...rest } = summary;
+    return jsonResponse({ ...rest, enrich_queued: enrichQueued });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return errorResponse(msg, 500);

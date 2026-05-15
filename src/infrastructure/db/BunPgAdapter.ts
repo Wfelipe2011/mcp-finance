@@ -71,8 +71,19 @@ export interface TenantRow {
   last_login_at: string | null;
 }
 
+export interface EnrichJob {
+  id: number;
+  tenant_id: string;
+  transaction_id: string;
+  date: string | null;
+  status: string;
+  attempts: number;
+  worker_id: string | null;
+}
+
 export interface AiInsightsRepository {
   getUnenriched(limit: number): Promise<UnenrichedTransaction[]>;
+  getUnenrichedById(transactionId: string): Promise<UnenrichedTransaction | null>;
   upsertOne(row: InsightRow): Promise<void>;
 }
 
@@ -119,6 +130,13 @@ export class BunPgAdapter {
     findAll(): Promise<TenantRow[]>;
     create(data: { name: string; email: string; password_hash: string; pluggy_email?: string | null; pluggy_password?: string | null }): Promise<TenantRow>;
     setStatus(id: string, status: string): Promise<TenantRow | null>;
+  };
+  readonly enrich_jobs: {
+    enqueue(tenantId: string, transactionIds: string[]): Promise<number>;
+    nextJob(workerId: string): Promise<EnrichJob | null>;
+    markDone(jobId: number, workerId: string): Promise<void>;
+    markError(jobId: number, error: string): Promise<void>;
+    releaseStuck(): Promise<void>;
   };
 
   constructor(private readonly tenantId?: string) {
@@ -496,6 +514,25 @@ export class BunPgAdapter {
         return rows;
       },
 
+      async getUnenrichedById(transactionId: string): Promise<UnenrichedTransaction | null> {
+        const rows = await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<UnenrichedTransaction[]>`
+            SELECT
+              t.transaction_id,
+              t.description,
+              t.amount_signed,
+              t.transaction_kind,
+              t.category_pt,
+              t.category_group_pt
+            FROM f_transacoes t
+            WHERE t.transaction_id = ${transactionId}
+            LIMIT 1
+          `;
+        });
+        return rows[0] ?? null;
+      },
+
       async upsertOne(row: InsightRow): Promise<void> {
         // Bun SQL doesn't auto-serialize JS arrays to Postgres text[] literals
         const tagsLiteral = row.tags?.length
@@ -690,7 +727,7 @@ export class BunPgAdapter {
         return sql<TenantRow[]>`
           SELECT id, name, email, status, created_at, last_login_at
           FROM tenants
-          ORDER BY created_at DESC
+          ORDER BY last_login_at DESC NULLS LAST
         `;
       },
       async create(data) {
@@ -710,6 +747,93 @@ export class BunPgAdapter {
           RETURNING id, name, email, status, created_at, last_login_at
         `;
         return rows[0] ?? null;
+      },
+    };
+
+    // ── enrich_jobs ───────────────────────────────────────────────────────────
+    this.enrich_jobs = {
+      async enqueue(tenantId: string, _transactionIds: string[]): Promise<number> {
+        const result = await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+          return tx`
+            INSERT INTO enrich_jobs (tenant_id, transaction_id, date)
+            SELECT t.tenant_id, t.id, t.date
+            FROM transactions t
+            WHERE t.tenant_id = ${tenantId}::uuid
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_transaction_insights ai WHERE ai.transaction_id = t.id
+              )
+            ON CONFLICT (transaction_id) DO NOTHING
+            RETURNING id
+          `;
+        });
+        return result.length;
+      },
+
+      async nextJob(workerId: string): Promise<EnrichJob | null> {
+        const rows = await sql<EnrichJob[]>`
+          WITH rnd_tenant AS (
+            SELECT tenant_id FROM enrich_jobs
+            WHERE status = 'pending'
+            GROUP BY tenant_id
+            ORDER BY RANDOM() LIMIT 1
+          ),
+          next AS (
+            SELECT id, transaction_id, tenant_id, date
+            FROM enrich_jobs
+            WHERE status = 'pending'
+              AND tenant_id = (SELECT tenant_id FROM rnd_tenant)
+            ORDER BY date DESC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          UPDATE enrich_jobs SET
+            status = 'running',
+            worker_id = ${workerId}::uuid,
+            started_at = NOW(),
+            attempts = attempts + 1
+          FROM next
+          WHERE enrich_jobs.id = next.id
+          RETURNING enrich_jobs.id, enrich_jobs.tenant_id, enrich_jobs.transaction_id,
+                    enrich_jobs.date, enrich_jobs.status, enrich_jobs.attempts, enrich_jobs.worker_id
+        `;
+        return rows[0] ?? null;
+      },
+
+      async markDone(jobId: number, workerId: string): Promise<void> {
+        await sql.begin(async (tx) => {
+          await tx`
+            UPDATE enrich_jobs
+            SET status = 'done', finished_at = NOW()
+            WHERE id = ${jobId}
+          `;
+          await tx`
+            UPDATE workers
+            SET jobs_done = jobs_done + 1, last_seen_at = NOW()
+            WHERE id = ${workerId}::uuid
+          `;
+        });
+      },
+
+      async markError(jobId: number, error: string): Promise<void> {
+        await sql`
+          UPDATE enrich_jobs
+          SET
+            error_msg = ${error},
+            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
+            started_at = NULL,
+            worker_id = NULL
+          WHERE id = ${jobId}
+        `;
+      },
+
+      async releaseStuck(): Promise<void> {
+        await sql`
+          UPDATE enrich_jobs
+          SET status = 'pending', started_at = NULL, worker_id = NULL
+          WHERE status = 'running'
+            AND started_at < NOW() - INTERVAL '10 minutes'
+        `;
       },
     };
   }
