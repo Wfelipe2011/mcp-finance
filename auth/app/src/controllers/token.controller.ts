@@ -4,16 +4,15 @@ import { LoginAutomationService } from '../services/login-automation';
 const automationService = new LoginAutomationService();
 
 export async function tokenHandler(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const email = process.env['PLUGGY_EMAIL'];
-  const appPassword = process.env['PLUGGY_PASSWORD'];
+  const { email, appPassword } = req.body as { email?: string; appPassword?: string };
 
   if (!email || !appPassword) {
-    res.status(500).json({
-      error: 'PLUGGY_EMAIL e PLUGGY_PASSWORD devem estar definidos no ambiente',
+    res.status(400).json({
+      error: 'email e appPassword são obrigatórios no body',
     });
     return;
   }

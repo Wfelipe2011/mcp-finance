@@ -3,10 +3,10 @@ import { TokenHttpAdapter } from "../../../infrastructure/token/TokenHttpAdapter
 import { SyncUseCase } from "../../sync/SyncUseCase.ts";
 import { jsonResponse, errorResponse } from "../helpers.ts";
 
-export async function handleSync(_req: Request): Promise<Response> {
-  const db = new BunPgAdapter();
+export async function handleSync(_req: Request, tenantId: string): Promise<Response> {
+  const db = new BunPgAdapter(tenantId);
   try {
-    const tokenPort = new TokenHttpAdapter();
+    const tokenPort = new TokenHttpAdapter(tenantId);
     const useCase = new SyncUseCase({
       tokenPort,
       itemRepo: db.items,

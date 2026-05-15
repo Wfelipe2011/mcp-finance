@@ -136,3 +136,32 @@ O arquivo `docs/finance-context.md` contém:
 - Seção **Descobertas** para anotar padrões encontrados durante as sessões
 
 > O agente opera em modo `restricted` (somente leitura) — não é possível alterar dados acidentalmente.
+
+## Migração para multi-tenant
+
+Se você tem um banco de dados já populado (single-tenant) e precisa migrar para o novo schema multi-tenant, execute:
+
+```bash
+# 1. Aplique o novo schema (adiciona novas tabelas e colunas tenant_id como nullable)
+#    Este passo é necessário apenas para bancos existentes — novos bancos já são criados corretamente.
+psql "$DATABASE_URL" -f src/infrastructure/db/schema.sql
+psql "$DATABASE_URL" -f src/infrastructure/db/gold-ai.sql
+
+# 2. Execute o script de migração
+#    Cria o tenant inicial com base nas env vars e preenche tenant_id em todas as tabelas
+bun run src/scripts/migrate-to-multitenant.ts
+
+# 3. Verifique os dados e então remova os NULL checks (opcional — schema.sql já faz isso em instalações novas)
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM items WHERE tenant_id IS NULL"
+```
+
+**Variáveis de ambiente necessárias para a migração:**
+
+| Variável | Uso na migração |
+|---|---|
+| `APP_USERNAME` | Email do tenant inicial |
+| `APP_PASSWORD` | Senha do tenant inicial (será armazenada com bcrypt) |
+| `PLUGGY_EMAIL` | Credencial Pluggy do tenant inicial |
+| `PLUGGY_PASSWORD` | Credencial Pluggy do tenant inicial |
+
+> **Atenção:** Nunca suba todos os serviços antes de completar a migração. A API exige `tenant_id` nos JWTs e os dados existentes precisam estar migrados primeiro.

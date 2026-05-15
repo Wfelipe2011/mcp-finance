@@ -3,21 +3,12 @@
 -- Views e tabelas do modelo dimensional (star schema)
 -- Não modifica tabelas bronze; apenas SELECT sobre elas
 
--- ────────────────────────────────────────────────
--- d_users  (tabela seed — surrogate key para membros da família)
--- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS d_users (
-  id           SERIAL PRIMARY KEY,
-  name         TEXT NOT NULL UNIQUE,
-  display_name TEXT NOT NULL
-);
-
--- d_users is populated dynamically during the enrich step from Pluggy identity data.
+-- Note: tenant_members (substitui d_users) está definido em schema.sql
 
 -- ────────────────────────────────────────────────
 -- d_data  (view de calendário — extraída das transações reais)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW d_data AS
+CREATE OR REPLACE VIEW d_data WITH (security_invoker = true) AS
 SELECT
   dates.data,
   EXTRACT(YEAR  FROM dates.data)::INT  AS year,
@@ -58,7 +49,7 @@ FROM (
 -- ────────────────────────────────────────────────
 -- d_conta  (view de contas bancárias e cartões)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW d_conta AS
+CREATE OR REPLACE VIEW d_conta WITH (security_invoker = true) AS
 SELECT
   a.id                AS account_id,
   a.name              AS nome,
@@ -74,7 +65,7 @@ INNER JOIN items i ON a.item_id = i.id;
 -- ────────────────────────────────────────────────
 -- d_categoria  (view de hierarquia de categorias PT-BR)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW d_categoria AS
+CREATE OR REPLACE VIEW d_categoria WITH (security_invoker = true) AS
 SELECT
   cl.category_id,
   cl.name_pt      AS category_pt,

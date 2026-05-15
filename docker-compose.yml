@@ -29,6 +29,8 @@ services:
       APP_USERNAME: ${APP_USERNAME}
       APP_PASSWORD: ${APP_PASSWORD}
       APP_SECRET: ${APP_SECRET}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       PORT: "3001"
     depends_on:
       postgres:
@@ -36,6 +38,17 @@ services:
       auth:
         condition: service_started
     restart: unless-stopped
+
+  supervisor:
+    build: .
+    command: bun run supervisor
+    environment:
+      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      APP_SECRET: ${APP_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
 
   postgres:
     image: postgres:16
@@ -53,6 +66,7 @@ services:
       - ./src/infrastructure/db/gold-ai.sql:/docker-entrypoint-initdb.d/03-gold-ai.sql:ro
       - ./src/infrastructure/db/silver-facts.sql:/docker-entrypoint-initdb.d/04-silver-facts.sql:ro
       - ./src/infrastructure/db/gold-cubes.sql:/docker-entrypoint-initdb.d/05-gold-cubes.sql:ro
+      - ./src/infrastructure/db/grants.sql:/docker-entrypoint-initdb.d/06-grants.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s

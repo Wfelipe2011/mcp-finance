@@ -9,7 +9,9 @@
 -- Populado pelo pipeline gold-ai-agent (change separada)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_transaction_insights (
-  transaction_id    TEXT PRIMARY KEY REFERENCES transactions(id),
+  tenant_id         UUID NOT NULL REFERENCES tenants(id),
+  transaction_id    TEXT NOT NULL REFERENCES transactions(id),
+  PRIMARY KEY (tenant_id, transaction_id),
   merchant_name     TEXT,           -- "Netflix", "Amazon Web Services"
   merchant_country  TEXT,           -- "BR", "US"
   is_recurring      BOOLEAN,        -- assinatura detectada
@@ -28,6 +30,12 @@ CREATE TABLE IF NOT EXISTS ai_transaction_insights (
 CREATE INDEX IF NOT EXISTS idx_ai_insights_analyzed_at
   ON ai_transaction_insights (analyzed_at);
 
+-- RLS
+ALTER TABLE ai_transaction_insights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_transaction_insights FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON ai_transaction_insights
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
 -- ---------------------------------------------------------------------------
 -- ai_monthly_digest
 -- Análise narrativa de mês completo — consumida diretamente pelo agente via MCP
@@ -35,9 +43,10 @@ CREATE INDEX IF NOT EXISTS idx_ai_insights_analyzed_at
 -- Input: ai_transaction_insights já enriquecido (não o bronze direto)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_monthly_digest (
+  tenant_id            UUID NOT NULL REFERENCES tenants(id),
   year                 INT,
   month                INT,
-  PRIMARY KEY (year, month),
+  PRIMARY KEY (tenant_id, year, month),
 
   -- métricas calculadas pelo LLM com base nos insights linha a linha
   cashflow_real        NUMERIC(18,2),  -- receitas reais − entradas de dívida
@@ -57,3 +66,9 @@ CREATE TABLE IF NOT EXISTS ai_monthly_digest (
   model_version        TEXT,
   digest_at            TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- RLS
+ALTER TABLE ai_monthly_digest ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_monthly_digest FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON ai_monthly_digest
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);

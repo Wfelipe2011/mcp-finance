@@ -5,9 +5,62 @@
 -- Executar via: /docker-entrypoint-initdb.d/01-schema.sql (auto on first start)
 
 -- ────────────────────────────────────────────────
+-- tenants (famílias/organizações — multi-tenant)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tenants (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name             TEXT NOT NULL,
+  email            TEXT NOT NULL UNIQUE,
+  password_hash    TEXT NOT NULL,
+  pluggy_email     TEXT,
+  pluggy_password  TEXT,
+  status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_login_at    TIMESTAMP
+);
+
+-- ────────────────────────────────────────────────
+-- workers (agentes AI de enriquecimento)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS workers (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  ai_base_url   TEXT NOT NULL,
+  ai_api_key    TEXT,
+  ai_model      TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'busy', 'error', 'offline')),
+  error_count   INTEGER NOT NULL DEFAULT 0,
+  last_error    TEXT,
+  jobs_done     INTEGER NOT NULL DEFAULT 0,
+  last_seen_at  TIMESTAMP,
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ────────────────────────────────────────────────
+-- enrich_jobs (fila de enriquecimento AI por transação)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS enrich_jobs (
+  id             BIGSERIAL PRIMARY KEY,
+  tenant_id      UUID NOT NULL REFERENCES tenants(id),
+  transaction_id TEXT NOT NULL UNIQUE,
+  date           TEXT,
+  status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'error')),
+  attempts       INTEGER NOT NULL DEFAULT 0,
+  worker_id      UUID REFERENCES workers(id),
+  started_at     TIMESTAMP,
+  finished_at    TIMESTAMP,
+  error_msg      TEXT,
+  created_at     TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrich_jobs_status_tenant_date
+  ON enrich_jobs (status, tenant_id, date DESC);
+
+-- ────────────────────────────────────────────────
 -- items (conexões bancárias)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS items (
+  tenant_id        UUID NOT NULL REFERENCES tenants(id),
   id               TEXT PRIMARY KEY,
   connector        TEXT,
   status           TEXT,
@@ -23,6 +76,7 @@ CREATE TABLE IF NOT EXISTS items (
 -- accounts (contas bancárias e cartões)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS accounts (
+  tenant_id                        UUID NOT NULL REFERENCES tenants(id),
   id                               TEXT PRIMARY KEY,
   item_id                          TEXT NOT NULL REFERENCES items(id),
   type                             TEXT,
@@ -60,6 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_item_id ON accounts(item_id);
 -- transactions (transações bancárias e de cartão)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS transactions (
+  tenant_id                 UUID NOT NULL REFERENCES tenants(id),
   id                        TEXT PRIMARY KEY,
   account_id                TEXT NOT NULL REFERENCES accounts(id),
   description               TEXT,
@@ -101,6 +156,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_account_id_date
 -- investments (ativos financeiros)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS investments (
+  tenant_id              UUID NOT NULL REFERENCES tenants(id),
   id                     TEXT PRIMARY KEY,
   item_id                TEXT NOT NULL REFERENCES items(id),
   name                   TEXT,
@@ -149,6 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_investments_item_id ON investments(item_id);
 -- investment_transactions (movimentações de investimento)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS investment_transactions (
+  tenant_id                    UUID NOT NULL REFERENCES tenants(id),
   id                           TEXT PRIMARY KEY,
   investment_id                TEXT NOT NULL REFERENCES investments(id),
   description                  TEXT,
@@ -204,12 +261,14 @@ CREATE TABLE IF NOT EXISTS category_labels (
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS category_overrides (
   id                   SERIAL PRIMARY KEY,
-  pattern              TEXT NOT NULL UNIQUE,
+  tenant_id            UUID NOT NULL REFERENCES tenants(id),
+  pattern              TEXT NOT NULL,
   category_id_override TEXT NOT NULL REFERENCES category_labels(category_id),
   note                 TEXT,
   priority             INTEGER NOT NULL DEFAULT 100,
   match_count          INTEGER NOT NULL DEFAULT 0,
-  created_at           TEXT NOT NULL DEFAULT (NOW()::TEXT)
+  created_at           TEXT NOT NULL DEFAULT (NOW()::TEXT),
+  UNIQUE (tenant_id, pattern)
 );
 
 -- seed: category_groups
@@ -332,19 +391,15 @@ INSERT INTO category_labels (category_id, name_pt, group_id) VALUES
   ('200300000','Plano de saúde',                             '20')
 ON CONFLICT DO NOTHING;
 
--- seed: category_overrides (regras iniciais de recategorização)
-INSERT INTO category_overrides (pattern, category_id_override, note, priority) VALUES
-  ('%Amazon AWS%',  '09000000', 'Amazon Web Services — incorretamente categorizado como livraria', 10),
-  ('%OpenRouter%',  '09000000', 'OpenRouter.ai — API de LLMs, incorretamente categorizado como eletrônicos', 10),
-  ('%Neon.tech%',   '09000000', 'Neon — banco de dados cloud, incorretamente categorizado', 10)
-ON CONFLICT DO NOTHING;
+-- seed: category_overrides removido — seeds agora são por tenant (ver migration script)
 
 -- ────────────────────────────────────────────────
 -- transactions_enriched (camada bronze — classificação de natureza)
--- Repopulada a cada sync via TRUNCATE + INSERT ... SELECT
+-- Repopulada a cada sync via DELETE + INSERT ... SELECT (RLS garante escopo por tenant)
 -- ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS transactions_enriched (
   -- colunas espelhadas de transactions
+  tenant_id                 UUID NOT NULL REFERENCES tenants(id),
   id                        TEXT PRIMARY KEY,
   account_id                TEXT NOT NULL REFERENCES accounts(id),
   description               TEXT,
@@ -378,3 +433,79 @@ CREATE INDEX IF NOT EXISTS idx_tx_enriched_account_id_date
 
 CREATE INDEX IF NOT EXISTS idx_tx_enriched_transaction_kind
   ON transactions_enriched(transaction_kind);
+
+-- ────────────────────────────────────────────────
+-- tenant_members (membros da família por tenant)
+-- Substitui d_users single-tenant
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tenant_members (
+  id            SERIAL PRIMARY KEY,
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
+  name          TEXT NOT NULL,
+  display_name  TEXT NOT NULL,
+  UNIQUE (tenant_id, name)
+);
+
+-- ════════════════════════════════════════════════
+-- Row Level Security (RLS) — isolamento por tenant
+-- ════════════════════════════════════════════════
+
+-- items
+ALTER TABLE items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE items FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON items
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- accounts
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON accounts
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- transactions
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON transactions
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- investments
+ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investments FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON investments
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- investment_transactions
+ALTER TABLE investment_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investment_transactions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON investment_transactions
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- category_overrides
+ALTER TABLE category_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE category_overrides FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON category_overrides
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- transactions_enriched
+ALTER TABLE transactions_enriched ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions_enriched FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON transactions_enriched
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- tenant_members
+ALTER TABLE tenant_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_members FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON tenant_members
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- Note: enrich_jobs and workers do NOT have RLS — workers need cross-tenant visibility
+
+-- ════════════════════════════════════════════════
+-- Application role (non-superuser, RLS-compliant)
+-- ════════════════════════════════════════════════
+-- The POSTGRES_USER (postgres) is the DDL superuser used only during init.
+-- The application connects as 'finance' which has no BYPASSRLS privilege,
+-- so all row level security policies apply to it normally.
+CREATE ROLE finance WITH LOGIN PASSWORD 'finance' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+GRANT CONNECT ON DATABASE finance TO finance;
+GRANT USAGE ON SCHEMA public TO finance;

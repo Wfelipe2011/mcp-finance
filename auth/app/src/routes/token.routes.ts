@@ -3,6 +3,6 @@ import { tokenHandler } from '../controllers/token.controller';
 
 const router = Router();
 
-router.get('/', tokenHandler);
+router.post('/', tokenHandler);
 
 export default router;

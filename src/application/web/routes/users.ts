@@ -1,9 +1,8 @@
 import { BunPgAdapter } from "../../../infrastructure/db/BunPgAdapter.ts";
 import { jsonResponse, errorResponse } from "../helpers.ts";
 
-const db = new BunPgAdapter();
-
-export async function handleGetUsers(_req: Request): Promise<Response> {
+export async function handleGetUsers(_req: Request, tenantId: string): Promise<Response> {
+  const db = new BunPgAdapter(tenantId);
   try {
     const users = await db.users.getAll();
     return jsonResponse(users);
@@ -13,7 +12,8 @@ export async function handleGetUsers(_req: Request): Promise<Response> {
   }
 }
 
-export async function handleUpdateUser(req: Request, url: URL): Promise<Response> {
+export async function handleUpdateUser(req: Request, url: URL, tenantId: string): Promise<Response> {
+  const db = new BunPgAdapter(tenantId);
   const segments = url.pathname.split("/");
   const idStr = segments[segments.length - 1];
   const id = idStr ? parseInt(idStr, 10) : NaN;

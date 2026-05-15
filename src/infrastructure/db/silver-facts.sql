@@ -6,7 +6,7 @@
 -- ────────────────────────────────────────────────
 -- f_transacoes  (tabela fato completa de transações)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW f_transacoes AS
+CREATE OR REPLACE VIEW f_transacoes WITH (security_invoker = true) AS
 SELECT
   te.id                                               AS transaction_id,
   te.account_id,
@@ -31,14 +31,14 @@ SELECT
   te.category_group_pt,
   te.owner_normalized
 FROM transactions_enriched te
-INNER JOIN d_users u ON u.name = te.owner_normalized;
+INNER JOIN tenant_members u ON u.name = te.owner_normalized;
 
 -- ────────────────────────────────────────────────
 -- f_parcelas  (subset: transações com campos de parcelamento estruturado)
 -- Grain: (transaction_id) — uma linha por parcela registrada pelo Pluggy
 -- Inclui colunas derivadas para classificação de parcelamento
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW f_parcelas AS
+CREATE OR REPLACE VIEW f_parcelas WITH (security_invoker = true) AS
 SELECT
   te.id                                               AS transaction_id,
   te.account_id,
@@ -66,13 +66,13 @@ SELECT
   (te.cc_installment_number = 1)                      AS is_first_installment,
   (te.cc_total_installments - te.cc_installment_number) AS installments_remaining
 FROM transactions_enriched te
-INNER JOIN d_users u ON u.name = te.owner_normalized
+INNER JOIN tenant_members u ON u.name = te.owner_normalized
 WHERE te.cc_total_installments IS NOT NULL;
 
 -- ────────────────────────────────────────────────
 -- f_fluxo_caixa  (subset: apenas transações de caixa real)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW f_fluxo_caixa AS
+CREATE OR REPLACE VIEW f_fluxo_caixa WITH (security_invoker = true) AS
 SELECT *
 FROM f_transacoes
 WHERE is_real_cashflow = true;
@@ -80,7 +80,7 @@ WHERE is_real_cashflow = true;
 -- ────────────────────────────────────────────────
 -- f_investimentos  (movimentações de investimento)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW f_investimentos AS
+CREATE OR REPLACE VIEW f_investimentos WITH (security_invoker = true) AS
 SELECT
   it.id                                                     AS investment_transaction_id,
   it.investment_id,
@@ -105,7 +105,7 @@ INNER JOIN investments inv ON inv.id = it.investment_id;
 -- Para cada compra parcelada em aberto, gera uma linha por parcela ainda não registrada
 -- A data de vencimento é aproximada (~30 dias por parcela a partir da parcela atual)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW f_parcelas_futuras AS
+CREATE OR REPLACE VIEW f_parcelas_futuras WITH (security_invoker = true) AS
 WITH last_installment AS (
   -- Pega o último registro de cada compra parcelada (MAX installment_number por compra)
   SELECT DISTINCT ON (purchase_day, account_id, total_installments, ROUND(amount::NUMERIC, 2))

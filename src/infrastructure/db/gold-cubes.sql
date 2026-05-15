@@ -8,7 +8,7 @@
 -- Gastos por mês × categoria × membro da família
 -- Grain: (year, month, category_pt, group_pt, display_name)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_gastos_mensais AS
+CREATE OR REPLACE VIEW cube_gastos_mensais WITH (security_invoker = true) AS
 SELECT
   dd.year,
   dd.month,
@@ -20,7 +20,7 @@ SELECT
   ROUND(SUM(ABS(fc.amount_signed))::NUMERIC, 2)              AS total_gastos
 FROM f_fluxo_caixa fc
 INNER JOIN d_data  dd ON dd.data        = fc.date_day
-INNER JOIN d_users du ON du.id          = fc.user_id
+INNER JOIN tenant_members du ON du.id          = fc.user_id
 LEFT  JOIN d_categoria dc ON dc.category_id = fc.category_id
 WHERE fc.transaction_kind = 'EXPENSE'
 GROUP BY
@@ -34,7 +34,7 @@ GROUP BY
 -- Receitas, despesas e saldo líquido por mês
 -- Grain: (year, month)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_cashflow_mensal AS
+CREATE OR REPLACE VIEW cube_cashflow_mensal WITH (security_invoker = true) AS
 SELECT
   dd.year,
   dd.month,
@@ -66,7 +66,7 @@ ORDER BY dd.year, dd.month;
 -- Snapshot atual de saldos e limites por conta/banco/dono
 -- Grain: (account_id) — uma linha por conta
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_patrimonio AS
+CREATE OR REPLACE VIEW cube_patrimonio WITH (security_invoker = true) AS
 SELECT
   dc.account_id,
   dc.nome,
@@ -89,7 +89,7 @@ INNER JOIN accounts a ON a.id = dc.account_id;
 -- Gastos por mês × grupo (família consolidada, visão macro)
 -- Grain: (year, month, group_pt)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_gastos_grupo_mensal AS
+CREATE OR REPLACE VIEW cube_gastos_grupo_mensal WITH (security_invoker = true) AS
 SELECT
   year,
   month,
@@ -107,7 +107,7 @@ ORDER BY year, month, total_gastos DESC;
 -- Gastos por mês × categoria (família consolidada, sem drill por membro)
 -- Grain: (year, month, group_pt, category_pt)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_gastos_categoria_mensal AS
+CREATE OR REPLACE VIEW cube_gastos_categoria_mensal WITH (security_invoker = true) AS
 SELECT
   year,
   month,
@@ -126,7 +126,7 @@ ORDER BY year, month, total_gastos DESC;
 -- Movimentações de investimentos por mês × produto × tipo de movimento
 -- Grain: (year, month, investment_name, movement_type)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_investimentos_mensal AS
+CREATE OR REPLACE VIEW cube_investimentos_mensal WITH (security_invoker = true) AS
 SELECT
   EXTRACT(YEAR  FROM fi.date_day)::INT                    AS year,
   EXTRACT(MONTH FROM fi.date_day)::INT                    AS month,
@@ -159,7 +159,7 @@ ORDER BY year, month;
 -- Decisão D2: description limpa via regexp_replace removendo sufixo PARC##/##
 -- Decisão D3: compromisso_restante = (MAX(total) - MAX(installment_atual)) * MIN(amount)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_compromissos_ativos AS
+CREATE OR REPLACE VIEW cube_compromissos_ativos WITH (security_invoker = true) AS
 SELECT
   regexp_replace(MIN(fp.description), 'PARC\d+/\d+', '', 'g') AS description,
   DATE_TRUNC('month', fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo')::DATE
@@ -192,7 +192,7 @@ FROM (
     AND te.transaction_kind = 'EXPENSE'
 ) fp
 INNER JOIN accounts  a  ON a.id      = fp.account_id
-INNER JOIN d_users   du ON du.name   = fp.owner_normalized
+INNER JOIN tenant_members   du ON du.name   = fp.owner_normalized
 GROUP BY
   fp.account_id,
   DATE_TRUNC('month', fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo'),
@@ -208,7 +208,7 @@ ORDER BY compromisso_restante DESC;
 -- Grain: (year, month, category_pt, group_pt, display_name) — igual a cube_gastos_mensais
 -- Decisão D4: inclui parcela 1 (compra nova parcelada) + compras à vista (IS NULL ou = 1)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_gastos_novos AS
+CREATE OR REPLACE VIEW cube_gastos_novos WITH (security_invoker = true) AS
 SELECT
   dd.year,
   dd.month,
@@ -220,7 +220,7 @@ SELECT
   ROUND(SUM(ABS(fc.amount_signed))::NUMERIC, 2)                     AS total_gastos
 FROM f_fluxo_caixa fc
 INNER JOIN d_data      dd ON dd.data        = fc.date_day
-INNER JOIN d_users     du ON du.id          = fc.user_id
+INNER JOIN tenant_members     du ON du.id          = fc.user_id
 LEFT  JOIN d_categoria dc ON dc.category_id = fc.category_id
 -- join back to bronze for installment fields (not exposed in f_fluxo_caixa)
 INNER JOIN transactions_enriched te ON te.id = fc.transaction_id
@@ -243,7 +243,7 @@ GROUP BY
 -- Fórmula: saldo_liquido (contas correntes + poupança) / media_saidas_90d (3 meses)
 -- runway_meses = NULL se não há histórico de despesas (evita divisão por zero)
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW kpi_cash_runway AS
+CREATE OR REPLACE VIEW kpi_cash_runway WITH (security_invoker = true) AS
 WITH saldo_atual AS (
   SELECT COALESCE(SUM(saldo_atual), 0) AS saldo_liquido
   FROM cube_patrimonio
@@ -272,7 +272,7 @@ FROM saldo_atual sa, media_gastos mg;
 -- is_projected = true:  estimativa baseada em f_parcelas_futuras
 -- Mês atual não é duplicado: futuro começa no mês seguinte ao último com dados reais
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_cashflow_projetado AS
+CREATE OR REPLACE VIEW cube_cashflow_projetado WITH (security_invoker = true) AS
 WITH historico AS (
   SELECT
     year,
@@ -312,7 +312,7 @@ ORDER BY year, month;
 -- Tendências de gastos: média dos últimos 3 meses por grupo + recorrentes identificados por AI
 -- Grain: (tipo, nome) — tipo='grupo' ou tipo='recorrente'
 -- ────────────────────────────────────────────────
-CREATE OR REPLACE VIEW cube_tendencias AS
+CREATE OR REPLACE VIEW cube_tendencias WITH (security_invoker = true) AS
 WITH ultimos_3 AS (
   SELECT year, month FROM cube_cashflow_mensal
   ORDER BY year DESC, month DESC LIMIT 3
