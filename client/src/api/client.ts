@@ -10,6 +10,9 @@ import type {
   TransacoesResponse,
   Tendencias,
   User,
+  ForecastGroupsResponse,
+  ForecastCategoriesResponse,
+  ForecastMessage,
 } from "./types.ts";
 
 const BASE = "";
@@ -79,6 +82,18 @@ export function fetchTransacoes(month: string, limit = 50, offset = 0): Promise<
 
 export function fetchTendencias(): Promise<Tendencias> {
   return get<Tendencias>("/api/tendencias");
+}
+
+export function fetchForecastGroups(): Promise<ForecastGroupsResponse> {
+  return get<ForecastGroupsResponse>("/api/forecast/groups");
+}
+
+export function fetchForecastCategories(): Promise<ForecastCategoriesResponse> {
+  return get<ForecastCategoriesResponse>("/api/forecast/categories");
+}
+
+export function fetchForecastMessage(): Promise<ForecastMessage> {
+  return get<ForecastMessage>("/api/forecast/message");
 }
 
 export interface SyncSummary {

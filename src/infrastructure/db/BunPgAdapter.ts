@@ -142,11 +142,50 @@ export interface ForecastAiMessage {
   created_at: string;
 }
 
+export interface RealSpendingByGroup {
+  year: number;
+  month: number;
+  group_pt: string;
+  total_gastos: number;
+}
+
+export interface RealSpendingByCategory {
+  year: number;
+  month: number;
+  category_pt: string;
+  group_pt: string;
+  total_gastos: number;
+}
+
+export interface ForecastByGroup {
+  target_year: number;
+  target_month: number;
+  group_pt: string;
+  predicted_total: number;
+  lower_bound: number;
+  upper_bound: number;
+}
+
+export interface ForecastByCategory {
+  target_year: number;
+  target_month: number;
+  category_pt: string;
+  group_pt: string;
+  predicted_total: number;
+  lower_bound: number;
+  upper_bound: number;
+}
+
 export interface ForecastRepository {
   getPredictionsByGroup(): Promise<PredictionByGroup[]>;
   getCurrentMonthSpendingByGroup(): Promise<SpendingByGroup[]>;
   saveDailyMessage(date: string, message: string, contextJson: Record<string, unknown>, modelVersion: string): Promise<void>;
   getDailyMessage(date: string): Promise<ForecastAiMessage | null>;
+  getRealSpendingByGroup(months: number): Promise<RealSpendingByGroup[]>;
+  getForecastByGroup(): Promise<ForecastByGroup[]>;
+  getRealSpendingByCategory(months: number): Promise<RealSpendingByCategory[]>;
+  getForecastByCategory(): Promise<ForecastByCategory[]>;
+  getTodayMessage(): Promise<ForecastAiMessage | null>;
 }
 
 export class BunPgAdapter {
@@ -779,6 +818,135 @@ export class BunPgAdapter {
             SELECT tenant_id, message_date::text, message_pt, context_json, model_version, created_at::text
             FROM forecast_ai_messages
             WHERE message_date = ${date}::date
+            LIMIT 1
+          `;
+        });
+        return rows[0] ?? null;
+      },
+
+      async getRealSpendingByGroup(months: number): Promise<RealSpendingByGroup[]> {
+        if (!tid) throw new Error("getRealSpendingByGroup requires tenantId");
+        const now = new Date();
+        const cutoff = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+        const cutoffYear = cutoff.getFullYear();
+        const cutoffMonth = cutoff.getMonth() + 1;
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<{ year: number; month: number; group_pt: string; total_gastos: number }[]>`
+            SELECT year, month, group_pt, SUM(total_gastos) AS total_gastos
+            FROM cube_gastos_mensais
+            WHERE (year * 100 + month) BETWEEN (${cutoffYear} * 100 + ${cutoffMonth}) AND (${curYear} * 100 + ${curMonth})
+            GROUP BY year, month, group_pt
+            ORDER BY year, month, group_pt
+          `;
+          return rows.map((r) => ({
+            year: Number(r.year),
+            month: Number(r.month),
+            group_pt: r.group_pt,
+            total_gastos: Number(r.total_gastos),
+          }));
+        });
+      },
+
+      async getForecastByGroup(): Promise<ForecastByGroup[]> {
+        if (!tid) throw new Error("getForecastByGroup requires tenantId");
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const rows = await sql<{ target_year: number; target_month: number; group_pt: string; predicted_total: number; lower_bound: number; upper_bound: number }[]>`
+          SELECT
+            target_year,
+            target_month,
+            group_pt,
+            SUM(predicted_amount)::float AS predicted_total,
+            SUM(lower_bound)::float      AS lower_bound,
+            SUM(upper_bound)::float      AS upper_bound
+          FROM forecast_predictions
+          WHERE tenant_id = ${tid}::uuid
+            AND status = 'ok'
+            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+          GROUP BY target_year, target_month, group_pt
+          ORDER BY target_year, target_month, group_pt
+        `;
+        return rows.map((r) => ({
+          target_year: Number(r.target_year),
+          target_month: Number(r.target_month),
+          group_pt: r.group_pt,
+          predicted_total: Number(r.predicted_total),
+          lower_bound: Number(r.lower_bound),
+          upper_bound: Number(r.upper_bound),
+        }));
+      },
+
+      async getRealSpendingByCategory(months: number): Promise<RealSpendingByCategory[]> {
+        if (!tid) throw new Error("getRealSpendingByCategory requires tenantId");
+        const now = new Date();
+        const cutoff = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+        const cutoffYear = cutoff.getFullYear();
+        const cutoffMonth = cutoff.getMonth() + 1;
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<{ year: number; month: number; category_pt: string; group_pt: string; total_gastos: number }[]>`
+            SELECT year, month, category_pt, group_pt, SUM(total_gastos) AS total_gastos
+            FROM cube_gastos_mensais
+            WHERE (year * 100 + month) BETWEEN (${cutoffYear} * 100 + ${cutoffMonth}) AND (${curYear} * 100 + ${curMonth})
+            GROUP BY year, month, category_pt, group_pt
+            ORDER BY year, month, group_pt, category_pt
+          `;
+          return rows.map((r) => ({
+            year: Number(r.year),
+            month: Number(r.month),
+            category_pt: r.category_pt,
+            group_pt: r.group_pt,
+            total_gastos: Number(r.total_gastos),
+          }));
+        });
+      },
+
+      async getForecastByCategory(): Promise<ForecastByCategory[]> {
+        if (!tid) throw new Error("getForecastByCategory requires tenantId");
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const rows = await sql<{ target_year: number; target_month: number; category_pt: string; group_pt: string; predicted_amount: number; lower_bound: number; upper_bound: number }[]>`
+          SELECT
+            target_year,
+            target_month,
+            category_pt,
+            group_pt,
+            predicted_amount::float AS predicted_amount,
+            lower_bound::float      AS lower_bound,
+            upper_bound::float      AS upper_bound
+          FROM forecast_predictions
+          WHERE tenant_id = ${tid}::uuid
+            AND status = 'ok'
+            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+          ORDER BY target_year, target_month, group_pt, category_pt
+        `;
+        return rows.map((r) => ({
+          target_year: Number(r.target_year),
+          target_month: Number(r.target_month),
+          category_pt: r.category_pt,
+          group_pt: r.group_pt,
+          predicted_total: Number(r.predicted_amount),
+          lower_bound: Number(r.lower_bound),
+          upper_bound: Number(r.upper_bound),
+        }));
+      },
+
+      async getTodayMessage(): Promise<ForecastAiMessage | null> {
+        if (!tid) throw new Error("getTodayMessage requires tenantId");
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<ForecastAiMessage[]>`
+            SELECT tenant_id, message_date::text, message_pt, context_json, model_version, created_at::text
+            FROM forecast_ai_messages
+            WHERE message_date = ${today}::date
             LIMIT 1
           `;
         });

@@ -168,3 +168,30 @@ export interface Tendencias {
   grupos: GrupoTendencia[];
   recorrentes: RecorrenteAI[];
 }
+
+export interface ForecastMonth {
+  year: number;
+  month: number;
+  type: "real" | "forecast";
+  group_pt: string;
+  category_pt?: string;
+  amount: number;
+  lower_bound?: number;
+  upper_bound?: number;
+}
+
+export interface ForecastGroupsResponse {
+  has_forecast: boolean;
+  months: ForecastMonth[];
+}
+
+export interface ForecastCategoriesResponse {
+  has_forecast: boolean;
+  months: ForecastMonth[];
+}
+
+export interface ForecastMessage {
+  has_message: boolean;
+  message_pt?: string;
+  message_date?: string;
+}
