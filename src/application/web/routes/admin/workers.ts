@@ -75,3 +75,12 @@ export async function handleDeleteWorker(req: Request, url: URL, sql: SQL): Prom
   if (!removed) return errorResponse("Worker não encontrado", 404);
   return jsonResponse({ ok: true });
 }
+
+export async function handleQueueStats(req: Request, sql: SQL): Promise<Response> {
+  const auth = await requireSuperAdmin(req);
+  if (!auth.valid) return errorResponse("Forbidden", auth.status);
+
+  const db = new BunPgAdapter(undefined, sql);
+  const stats = await db.enrich_jobs.getQueueStats();
+  return jsonResponse(stats);
+}

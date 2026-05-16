@@ -85,6 +85,19 @@ export interface EnrichJob {
   worker_id: string | null;
 }
 
+export interface QueueStats {
+  pending: number;
+  running: number;
+  done: number;
+  error: number;
+  total: number;
+  error_rate_current: number;
+  error_rate_historical: number;
+  throughput_jobs_per_sec: number | null;
+  eta_seconds: number | null;
+  throughput_source: 'workers' | 'global' | 'unavailable';
+}
+
 export interface AiInsightsRepository {
   getUnenriched(limit: number): Promise<UnenrichedTransaction[]>;
   getUnenrichedById(transactionId: string): Promise<UnenrichedTransaction | null>;
@@ -142,6 +155,7 @@ export class BunPgAdapter {
     markDone(jobId: number, workerId: string): Promise<void>;
     markError(jobId: number, error: string): Promise<void>;
     releaseStuck(): Promise<void>;
+    getQueueStats(): Promise<QueueStats>;
   };
 
   constructor(private readonly tenantId?: string, externalSql?: SQL) {
@@ -879,6 +893,76 @@ export class BunPgAdapter {
           WHERE status = 'running'
             AND started_at < NOW() - INTERVAL '10 minutes'
         `;
+      },
+
+      async getQueueStats(): Promise<QueueStats> {
+        // Query 1: counts by status
+        const countRows = await sql<{ status: string; cnt: string }[]>`
+          SELECT status, COUNT(*) AS cnt FROM enrich_jobs GROUP BY status
+        `;
+        const counts: Record<string, number> = {};
+        for (const r of countRows) counts[r.status] = parseInt(r.cnt, 10);
+        const pending = counts['pending'] ?? 0;
+        const running = counts['running'] ?? 0;
+        const done = counts['done'] ?? 0;
+        const error = counts['error'] ?? 0;
+        const total = pending + running + done + error;
+        const error_rate_current = total > 0 ? error / total : 0;
+        const error_rate_historical = (done + error) > 0 ? error / (done + error) : 0;
+
+        // Query 2: mediana por worker ativo com histórico
+        const workerRows = await sql<{ median_secs: string }[]>`
+          SELECT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY EXTRACT(EPOCH FROM (j.finished_at - j.started_at))
+            ) AS median_secs
+          FROM workers w
+          JOIN enrich_jobs j ON j.worker_id = w.id
+            AND j.status = 'done'
+            AND j.finished_at IS NOT NULL AND j.started_at IS NOT NULL
+          WHERE w.status IN ('active', 'idle', 'busy')
+          GROUP BY w.id
+          HAVING COUNT(j.id) > 0
+        `;
+
+        if (workerRows.length > 0) {
+          let throughput = 0;
+          for (const r of workerRows) {
+            const median = parseFloat(r.median_secs);
+            if (median > 0) throughput += 1 / median;
+          }
+          const eta_seconds = throughput > 0 && pending > 0 ? Math.ceil(pending / throughput) : null;
+          return { pending, running, done, error, total, error_rate_current, error_rate_historical,
+            throughput_jobs_per_sec: throughput > 0 ? throughput : null, eta_seconds, throughput_source: 'workers' };
+        }
+
+        // Query 3 fallback: mediana global (7d)
+        const globalRows = await sql<{ global_median_secs: string | null }[]>`
+          SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
+            ORDER BY EXTRACT(EPOCH FROM (finished_at - started_at))
+          ) AS global_median_secs
+          FROM enrich_jobs
+          WHERE status = 'done'
+            AND finished_at IS NOT NULL AND started_at IS NOT NULL
+            AND finished_at >= NOW() - INTERVAL '7 days'
+        `;
+        const globalMedian = globalRows[0]?.global_median_secs
+          ? parseFloat(globalRows[0].global_median_secs) : null;
+
+        if (globalMedian && globalMedian > 0) {
+          const activeRows = await sql<{ cnt: string }[]>`
+            SELECT COUNT(*) AS cnt FROM workers WHERE status IN ('active', 'idle', 'busy')
+          `;
+          const nActive = parseInt(activeRows[0]?.cnt ?? '0', 10);
+          const throughput = nActive > 0 ? nActive / globalMedian : null;
+          const eta_seconds = throughput && throughput > 0 && pending > 0
+            ? Math.ceil(pending / throughput) : null;
+          return { pending, running, done, error, total, error_rate_current, error_rate_historical,
+            throughput_jobs_per_sec: throughput, eta_seconds, throughput_source: 'global' };
+        }
+
+        return { pending, running, done, error, total, error_rate_current, error_rate_historical,
+          throughput_jobs_per_sec: null, eta_seconds: null, throughput_source: 'unavailable' };
       },
     };
   }

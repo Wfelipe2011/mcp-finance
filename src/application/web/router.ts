@@ -2,7 +2,7 @@ import { SQL } from "bun";
 import { errorResponse } from "./helpers.ts";
 import { serveAdminPanel } from "./routes/admin/panel.ts";
 import { handleAdminLogin } from "./routes/admin/login.ts";
-import { handleCreateWorker, handleListWorkers, handleUpdateWorker, handleDeleteWorker } from "./routes/admin/workers.ts";
+import { handleCreateWorker, handleListWorkers, handleUpdateWorker, handleDeleteWorker, handleQueueStats } from "./routes/admin/workers.ts";
 import { handleListTenants, handleCreateTenant, handleToggleTenantStatus } from "./routes/admin/tenants.ts";
 import { handleCashflow, handleCashflowProjetado } from "./routes/cashflow.ts";
 import { handleGastos } from "./routes/gastos.ts";
@@ -33,6 +33,7 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/admin/workers" && req.method === "GET") return handleListWorkers(req, sql);
   if (path.startsWith("/api/admin/workers/") && req.method === "PATCH") return handleUpdateWorker(req, url, sql);
   if (path.startsWith("/api/admin/workers/") && req.method === "DELETE") return handleDeleteWorker(req, url, sql);
+  if (path === "/api/admin/queue-stats" && req.method === "GET") return handleQueueStats(req, sql);
 
   if (path === "/api/sync" && req.method === "POST") return handleSync(req, tenantId, sql);
   if (path === "/api/users" && req.method === "GET") return handleGetUsers(req, tenantId, sql);

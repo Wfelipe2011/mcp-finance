@@ -37,6 +37,12 @@ const html = /* html */ `<!DOCTYPE html>
     .status-error { color: #dc2626; font-weight: 600; }
     .actions { display: flex; gap: 6px; }
     .logout-btn { float: right; margin-top: -4px; }
+    .queue-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 20px; }
+    .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+    .queue-stat { display: flex; flex-direction: column; gap: 4px; }
+    .queue-label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .queue-value { font-size: 1.4rem; font-weight: 700; color: #1e293b; }
+    .queue-sub { font-size: 11px; color: #9ca3af; }
   </style>
 </head>
 <body>
@@ -91,6 +97,46 @@ const html = /* html */ `<!DOCTYPE html>
   <!-- Workers -->
   <section id="workers-section">
     <h2>Workers</h2>
+
+    <!-- Fila -->
+    <div id="queue-card" class="queue-card">
+      <div class="queue-grid">
+        <div class="queue-stat">
+          <span class="queue-label">Pendentes</span>
+          <span class="queue-value" id="q-pending">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Executando</span>
+          <span class="queue-value" id="q-running">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Concluídos</span>
+          <span class="queue-value" id="q-done">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Erros</span>
+          <span class="queue-value" id="q-error">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Erro atual</span>
+          <span class="queue-value" id="q-error-rate-current">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Erro histórico</span>
+          <span class="queue-value" id="q-error-rate-hist">—</span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">ETA</span>
+          <span class="queue-value" id="q-eta">—</span>
+          <span class="queue-sub" id="q-eta-source"></span>
+        </div>
+        <div class="queue-stat">
+          <span class="queue-label">Throughput</span>
+          <span class="queue-value" id="q-throughput">—</span>
+        </div>
+      </div>
+    </div>
+
     <table id="workers-table">
       <thead>
         <tr>
@@ -190,7 +236,7 @@ const html = /* html */ `<!DOCTYPE html>
 
   // ── Load all ───────────────────────────────────────────────────────────────
   async function loadAll() {
-    await Promise.all([loadTenants(), loadWorkers()]);
+    await Promise.all([loadTenants(), loadWorkers(), loadQueueStats()]);
   }
 
   // ── Tenants ────────────────────────────────────────────────────────────────
@@ -413,10 +459,12 @@ const html = /* html */ `<!DOCTYPE html>
 
   // ── Auto-refresh ───────────────────────────────────────────────────────────
   let workersRefreshInterval = null;
+  let queueRefreshInterval = null;
 
   function startWorkersRefresh() {
     stopWorkersRefresh();
     workersRefreshInterval = setInterval(() => loadWorkers(), 30_000);
+    queueRefreshInterval = setInterval(() => loadQueueStats(), 30_000);
   }
 
   function stopWorkersRefresh() {
@@ -424,9 +472,51 @@ const html = /* html */ `<!DOCTYPE html>
       clearInterval(workersRefreshInterval);
       workersRefreshInterval = null;
     }
+    if (queueRefreshInterval !== null) {
+      clearInterval(queueRefreshInterval);
+      queueRefreshInterval = null;
+    }
   }
 
   // ── Utility ────────────────────────────────────────────────────────────────
+  function formatEta(seconds) {
+    if (seconds == null) return '—';
+    if (seconds < 60) return 'menos de 1 minuto';
+    if (seconds < 3600) return Math.round(seconds / 60) + ' min';
+    if (seconds < 86400) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.round((seconds % 3600) / 60);
+      return h + 'h ' + m + 'min';
+    }
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    return d + ' dias ' + h + 'h';
+  }
+
+  async function loadQueueStats() {
+    try {
+      const res = await fetch(API + '/api/admin/queue-stats', { headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const s = await res.json();
+      document.getElementById('q-pending').textContent = s.pending.toLocaleString('pt-BR');
+      document.getElementById('q-running').textContent = s.running.toLocaleString('pt-BR');
+      document.getElementById('q-done').textContent = s.done.toLocaleString('pt-BR');
+      document.getElementById('q-error').textContent = s.error.toLocaleString('pt-BR');
+      document.getElementById('q-error-rate-current').textContent =
+        (s.error_rate_current * 100).toFixed(1).replace('.', ',') + '%';
+      document.getElementById('q-error-rate-hist').textContent =
+        (s.error_rate_historical * 100).toFixed(1).replace('.', ',') + '%';
+      document.getElementById('q-eta').textContent = formatEta(s.eta_seconds);
+      const srcMap = { workers: 'por worker', global: 'global (fallback)', unavailable: 'sem dados' };
+      document.getElementById('q-eta-source').textContent = srcMap[s.throughput_source] ?? '';
+      document.getElementById('q-throughput').textContent = s.throughput_jobs_per_sec != null
+        ? (s.throughput_jobs_per_sec * 60).toFixed(1).replace('.', ',') + ' jobs/min'
+        : '—';
+    } catch {
+      // fail silently — não crítico
+    }
+  }
+
   function escHtml(s) {
     if (s == null) return '';
     return String(s)
