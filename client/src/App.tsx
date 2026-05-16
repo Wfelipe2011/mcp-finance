@@ -37,7 +37,8 @@ function isTokenValid(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return false;
-    const payload = JSON.parse(atob(parts[1]!)) as { exp?: number };
+    const base64 = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(base64)) as { exp?: number };
     return typeof payload.exp === "number" && payload.exp > Date.now() / 1000;
   } catch {
     return false;
