@@ -121,6 +121,34 @@ export interface AiDigestsRepository {
   upsert(row: DigestRow): Promise<void>;
 }
 
+export interface PredictionByGroup {
+  group_pt: string;
+  target_year: number;
+  target_month: number;
+  predicted_total: number;
+}
+
+export interface SpendingByGroup {
+  group_pt: string;
+  total_gastos: number;
+}
+
+export interface ForecastAiMessage {
+  tenant_id: string;
+  message_date: string;
+  message_pt: string;
+  context_json: Record<string, unknown>;
+  model_version: string;
+  created_at: string;
+}
+
+export interface ForecastRepository {
+  getPredictionsByGroup(): Promise<PredictionByGroup[]>;
+  getCurrentMonthSpendingByGroup(): Promise<SpendingByGroup[]>;
+  saveDailyMessage(date: string, message: string, contextJson: Record<string, unknown>, modelVersion: string): Promise<void>;
+  getDailyMessage(date: string): Promise<ForecastAiMessage | null>;
+}
+
 export class BunPgAdapter {
   private readonly sql: SQL;
   private readonly ownsSql: boolean;
@@ -133,6 +161,7 @@ export class BunPgAdapter {
   readonly enrichTransactions: EnrichTransactionsRepository;
   readonly aiInsights: AiInsightsRepository;
   readonly aiDigests: AiDigestsRepository;
+  readonly forecast: ForecastRepository;
   readonly users: {
     getAll(): Promise<{ id: number; name: string; display_name: string }[]>;
     updateDisplayName(id: number, displayName: string): Promise<{ id: number; name: string; display_name: string } | null>;
@@ -678,6 +707,82 @@ export class BunPgAdapter {
             model_version       = EXCLUDED.model_version,
             digest_at           = NOW()
         `;
+      },
+    };
+
+    // ── forecast ──────────────────────────────────────────────────────────────
+    this.forecast = {
+      async getPredictionsByGroup(): Promise<PredictionByGroup[]> {
+        if (!tid) throw new Error("getPredictionsByGroup requires tenantId");
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const rows = await sql<PredictionByGroup[]>`
+          SELECT
+            group_pt,
+            target_year,
+            target_month,
+            SUM(predicted_amount) AS predicted_total
+          FROM forecast_predictions
+          WHERE tenant_id = ${tid}::uuid
+            AND status = 'ok'
+            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+          GROUP BY group_pt, target_year, target_month
+          ORDER BY target_year, target_month, group_pt
+        `;
+        return rows.map((r) => ({ ...r, predicted_total: Number(r.predicted_total) }));
+      },
+
+      async getCurrentMonthSpendingByGroup(): Promise<SpendingByGroup[]> {
+        if (!tid) throw new Error("getCurrentMonthSpendingByGroup requires tenantId");
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<SpendingByGroup[]>`
+            SELECT group_pt, total_gastos
+            FROM cube_gastos_grupo_mensal
+            WHERE year = ${year} AND month = ${month}
+            ORDER BY total_gastos DESC
+          `;
+          return rows.map((r) => ({ ...r, total_gastos: Number(r.total_gastos) }));
+        });
+      },
+
+      async saveDailyMessage(
+        date: string,
+        message: string,
+        contextJson: Record<string, unknown>,
+        modelVersion: string,
+      ): Promise<void> {
+        if (!tid) throw new Error("saveDailyMessage requires tenantId");
+        await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          await tx`
+            INSERT INTO forecast_ai_messages (tenant_id, message_date, message_pt, context_json, model_version)
+            VALUES (${tid}::uuid, ${date}::date, ${message}, ${JSON.stringify(contextJson)}::jsonb, ${modelVersion})
+            ON CONFLICT (tenant_id, message_date) DO UPDATE SET
+              message_pt    = EXCLUDED.message_pt,
+              context_json  = EXCLUDED.context_json,
+              model_version = EXCLUDED.model_version,
+              created_at    = NOW()
+          `;
+        });
+      },
+
+      async getDailyMessage(date: string): Promise<ForecastAiMessage | null> {
+        if (!tid) throw new Error("getDailyMessage requires tenantId");
+        const rows = await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<ForecastAiMessage[]>`
+            SELECT tenant_id, message_date::text, message_pt, context_json, model_version, created_at::text
+            FROM forecast_ai_messages
+            WHERE message_date = ${date}::date
+            LIMIT 1
+          `;
+        });
+        return rows[0] ?? null;
       },
     };
 
