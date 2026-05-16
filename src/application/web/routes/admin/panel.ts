@@ -98,13 +98,20 @@ const html = /* html */ `<!DOCTYPE html>
           <th>URL</th>
           <th>Status</th>
           <th>Erros</th>
+          <th>Média (7d)</th>
+          <th>Mediana (7d)</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="workers-body">
-        <tr><td colspan="5">Carregando...</td></tr>
+        <tr><td colspan="7">Carregando...</td></tr>
       </tbody>
     </table>
+
+    <p style="margin-top: 12px; font-size: 12px; color: #6b7280;">
+      <strong>Média:</strong> soma dos tempos de todos os jobs dividida pela quantidade — sensível a outliers (ex: timeouts).
+      <strong>Mediana:</strong> tempo do job do meio na distribuição — mais representativa do caso típico.
+    </p>
 
     <details style="margin-top: 16px;">
       <summary>Novo Worker</summary>
@@ -139,6 +146,7 @@ const html = /* html */ `<!DOCTYPE html>
   function showData() {
     document.getElementById('login-section').hidden = true;
     document.getElementById('data-section').hidden = false;
+    startWorkersRefresh();
   }
 
   async function handleUnauthorized() {
@@ -176,6 +184,7 @@ const html = /* html */ `<!DOCTYPE html>
   // ── Logout ─────────────────────────────────────────────────────────────────
   document.getElementById('logout-btn').addEventListener('click', () => {
     clearToken();
+    stopWorkersRefresh();
     showLogin();
   });
 
@@ -289,21 +298,26 @@ const html = /* html */ `<!DOCTYPE html>
   // ── Workers ────────────────────────────────────────────────────────────────
   async function loadWorkers() {
     const tbody = document.getElementById('workers-body');
-    tbody.innerHTML = '<tr><td colspan="5">Carregando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7">Carregando...</td></tr>';
     try {
       const res = await fetch(API + '/api/admin/workers', { headers: authHeaders() });
       if (res.status === 401) { handleUnauthorized(); return; }
       const workers = await res.json();
       renderWorkers(workers);
     } catch {
-      tbody.innerHTML = '<tr><td colspan="5">Erro ao carregar</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7">Erro ao carregar</td></tr>';
     }
+  }
+
+  function fmtSecs(v) {
+    if (v == null) return '\u2014';
+    return parseFloat(v).toFixed(1).replace('.', ',') + 's';
   }
 
   function renderWorkers(workers) {
     const tbody = document.getElementById('workers-body');
     if (!workers.length) {
-      tbody.innerHTML = '<tr><td colspan="5">Nenhum worker cadastrado</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7">Nenhum worker cadastrado</td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -317,7 +331,9 @@ const html = /* html */ `<!DOCTYPE html>
         '<td>' + escHtml(w.name) + '</td>' +
         '<td>' + escHtml(w.ai_base_url) + '</td>' +
         '<td><span class="' + statusClass + '">' + escHtml(w.status) + '</span></td>' +
-        '<td>' + (w.consecutive_errors || 0) + '</td>' +
+        '<td>' + (w.error_count || 0) + '</td>' +
+        '<td>' + fmtSecs(w.avg_duration_7d_secs) + '</td>' +
+        '<td>' + fmtSecs(w.median_duration_7d_secs) + '</td>' +
         '<td><div class="actions">' +
           (canReactivate ? '<button class="btn-success btn-sm reactivate-worker">Reativar</button>' : '') +
           '<button class="btn-danger btn-sm remove-worker">Remover</button>' +
@@ -359,7 +375,7 @@ const html = /* html */ `<!DOCTYPE html>
       tr.remove();
       if (!document.getElementById('workers-body').children.length) {
         document.getElementById('workers-body').innerHTML =
-          '<tr><td colspan="5">Nenhum worker cadastrado</td></tr>';
+          '<tr><td colspan="7">Nenhum worker cadastrado</td></tr>';
       }
     } catch { /* ignore */ }
   }
@@ -394,6 +410,21 @@ const html = /* html */ `<!DOCTYPE html>
       errorEl.textContent = 'Erro de conexão';
     }
   });
+
+  // ── Auto-refresh ───────────────────────────────────────────────────────────
+  let workersRefreshInterval = null;
+
+  function startWorkersRefresh() {
+    stopWorkersRefresh();
+    workersRefreshInterval = setInterval(() => loadWorkers(), 30_000);
+  }
+
+  function stopWorkersRefresh() {
+    if (workersRefreshInterval !== null) {
+      clearInterval(workersRefreshInterval);
+      workersRefreshInterval = null;
+    }
+  }
 
   // ── Utility ────────────────────────────────────────────────────────────────
   function escHtml(s) {

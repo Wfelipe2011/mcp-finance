@@ -60,6 +60,10 @@ export interface WorkerRow {
   jobs_done: number;
   last_seen_at: string | null;
   created_at: string;
+  avg_duration_7d_secs: number | null;
+  median_duration_7d_secs: number | null;
+  avg_duration_all_secs: number | null;
+  median_duration_all_secs: number | null;
 }
 
 export interface TenantRow {
@@ -700,10 +704,33 @@ export class BunPgAdapter {
       },
       async findAll() {
         return sql<WorkerRow[]>`
-          SELECT id, name, ai_base_url, ai_api_key, ai_model, status, error_count,
-                 last_error, jobs_done, last_seen_at, created_at
-          FROM workers
-          ORDER BY created_at ASC
+          SELECT
+            w.id, w.name, w.ai_base_url, w.ai_api_key, w.ai_model, w.status,
+            w.error_count, w.last_error, w.jobs_done, w.last_seen_at, w.created_at,
+            AVG(EXTRACT(EPOCH FROM (j7.finished_at - j7.started_at)))
+              AS avg_duration_7d_secs,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY EXTRACT(EPOCH FROM (j7.finished_at - j7.started_at))
+            ) AS median_duration_7d_secs,
+            AVG(EXTRACT(EPOCH FROM (jall.finished_at - jall.started_at)))
+              AS avg_duration_all_secs,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (
+              ORDER BY EXTRACT(EPOCH FROM (jall.finished_at - jall.started_at))
+            ) AS median_duration_all_secs
+          FROM workers w
+          LEFT JOIN enrich_jobs j7
+            ON j7.worker_id = w.id
+            AND j7.status = 'done'
+            AND j7.finished_at IS NOT NULL
+            AND j7.started_at IS NOT NULL
+            AND j7.finished_at >= NOW() - INTERVAL '7 days'
+          LEFT JOIN enrich_jobs jall
+            ON jall.worker_id = w.id
+            AND jall.status = 'done'
+            AND jall.finished_at IS NOT NULL
+            AND jall.started_at IS NOT NULL
+          GROUP BY w.id
+          ORDER BY w.created_at ASC
         `;
       },
       async findActive() {
