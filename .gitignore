@@ -37,11 +37,11 @@ finance.db-wal
 
 # Finder (MacOS) folder config
 .DS_Store
-openspec
+
 
 # VS Code MCP config (contains credentials)
 .vscode/mcp.json
-.github
+
 
 # Auth service runtime data
 auth/data/
