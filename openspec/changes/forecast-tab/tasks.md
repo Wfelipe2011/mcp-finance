@@ -25,7 +25,7 @@
 ## 4. Validação
 
 - [x] 4.1 `cd client && bun run build` sem erros TypeScript
-- [ ] 4.2 Abrir aba Previsão no browser — loading state aparece
-- [ ] 4.3 Com dados no Postgres: card AI exibe mensagem, gráfico exibe barras real+previsto, tabela exibe categorias
-- [ ] 4.4 Sem dados (primeiro deploy): empty state exibe "Previsões ainda sendo preparadas"
-- [ ] 4.5 Simular erro de API: error state exibe mensagem
+- [x] 4.2 Abrir aba Previsão no browser — loading state aparece
+- [x] 4.3 Com dados no Postgres: card AI exibe mensagem, gráfico exibe barras real+previsto, tabela exibe categorias
+- [x] 4.4 Sem dados (primeiro deploy): empty state exibe "Previsões ainda sendo preparadas"
+- [x] 4.5 Simular erro de API: error state exibe mensagem

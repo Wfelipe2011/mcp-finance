@@ -1,14 +1,12 @@
 ---
-description: "Processo de testing gate — executar antes de arquivar qualquer change. Cobre Docker clean, derivação de testes a partir das specs, e execução com postgres-mcp e browser tools."
+description: "Processo de testing gate — executar antes de arquivar qualquer change. Cobre derivação de testes a partir das specs, e execução com postgres-mcp e browser tools."
 ---
 
 # Testing Gate — mcp-finance
 
 Execute antes de `/opsx:archive`. Valida a change.
 
-> ⚠️ `down -v` destrói todos os dados. Só executar quando o ambiente de teste não tiver dados que precisam ser preservados.
-
-## 2. Derivar casos de teste das specs
+## 1. Derivar casos de teste das specs
 
 Para cada change, ler os arquivos de spec em:
 ```

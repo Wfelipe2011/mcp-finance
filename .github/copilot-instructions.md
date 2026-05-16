@@ -18,7 +18,7 @@ O CLI só funciona na raiz `/home/wilson/study/mcp-finance/` — nunca em subpas
 
 **Antes de qualquer `/opsx:archive`, a change deve passar pelo testing gate.**
 
-O testing gate valida que a change funciona em ambiente limpo (Docker com volume zerado) usando dois MCPs disponíveis:
+O testing gate valida que a change funciona em ambiente usando dois MCPs disponíveis:
 
 - **`postgres-finance` MCP** — queries SQL diretas ao banco
 - **Browser tools VS Code** — `open_browser_page`, `screenshot_page`, `read_page`, `run_playwright_code`

@@ -39,6 +39,23 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  mcp-server:
+    build: .
+    command: bun run mcp
+    ports:
+      - "3002:3002"
+    environment:
+      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      TOKEN_URL: http://auth:3000/token
+      MCP_PORT: "3002"
+      MCP_HOST: 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+    restart: unless-stopped
+
   supervisor:
     build: .
     command: bun run supervisor
