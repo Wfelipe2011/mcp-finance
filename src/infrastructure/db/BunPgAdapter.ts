@@ -106,6 +106,7 @@ export interface AiDigestsRepository {
 
 export class BunPgAdapter {
   private readonly sql: SQL;
+  private readonly ownsSql: boolean;
 
   readonly items: ItemRepository;
   readonly accounts: AccountRepository;
@@ -139,10 +140,16 @@ export class BunPgAdapter {
     releaseStuck(): Promise<void>;
   };
 
-  constructor(private readonly tenantId?: string) {
-    const url = process.env["DATABASE_URL"];
-    if (!url) throw new Error("DATABASE_URL is not set");
-    this.sql = new SQL(url);
+  constructor(private readonly tenantId?: string, externalSql?: SQL) {
+    if (externalSql) {
+      this.sql = externalSql;
+      this.ownsSql = false;
+    } else {
+      const url = process.env["DATABASE_URL"];
+      if (!url) throw new Error("DATABASE_URL is not set");
+      this.sql = new SQL(url);
+      this.ownsSql = true;
+    }
 
     const sql = this.sql;
     const tid = this.tenantId;
@@ -156,10 +163,10 @@ export class BunPgAdapter {
           for (const r of rows) {
             await tx`
               INSERT INTO items (
-                id, connector, status, execution_status, products,
+                tenant_id, id, connector, status, execution_status, products,
                 last_updated_at, created_at, updated_at, synced_at
               ) VALUES (
-                ${r.id}, ${r.connector}, ${r.status}, ${r.executionStatus}, ${r.products},
+                ${tid}::uuid, ${r.id}, ${r.connector}, ${r.status}, ${r.executionStatus}, ${r.products},
                 ${r.lastUpdatedAt}, ${r.createdAt}, ${r.updatedAt}, ${r.syncedAt}
               )
               ON CONFLICT (id) DO UPDATE SET
@@ -185,7 +192,7 @@ export class BunPgAdapter {
           for (const r of rows) {
             await tx`
               INSERT INTO accounts (
-                id, item_id, type, subtype, name, balance, currency_code, number,
+                tenant_id, id, item_id, type, subtype, name, balance, currency_code, number,
                 owner, tax_number, marketing_name,
                 transfer_number, closing_balance, automatically_invested_balance,
                 overdraft_contracted_limit, overdraft_used_limit, unarranged_overdraft_amount,
@@ -193,7 +200,7 @@ export class BunPgAdapter {
                 cc_available_credit_limit, cc_minimum_payment, cc_balance_foreign_currency,
                 created_at, updated_at, synced_at
               ) VALUES (
-                ${r.id}, ${r.itemId}, ${r.type}, ${r.subtype}, ${r.name}, ${r.balance},
+                ${tid}::uuid, ${r.id}, ${r.itemId}, ${r.type}, ${r.subtype}, ${r.name}, ${r.balance},
                 ${r.currencyCode}, ${r.number}, ${r.owner}, ${r.taxNumber}, ${r.marketingName},
                 ${r.transferNumber}, ${r.closingBalance}, ${r.automaticallyInvestedBalance},
                 ${r.overdraftContractedLimit}, ${r.overdraftUsedLimit}, ${r.unarrangedOverdraftAmount},
@@ -230,14 +237,14 @@ export class BunPgAdapter {
           for (const r of rows) {
             await tx`
               INSERT INTO transactions (
-                id, account_id, description, description_raw, currency_code,
+                tenant_id, id, account_id, description, description_raw, currency_code,
                 amount, amount_in_account_currency, date, category, category_id,
                 balance, provider_code, status, type, operation_type, provider_id, "order",
                 payment_data, cc_card_number, cc_bill_id, cc_purchase_date,
                 cc_total_installments, cc_installment_number, cc_payee_mcc,
                 merchant, acquirer_data, created_at, updated_at, synced_at
               ) VALUES (
-                ${r.id}, ${r.accountId}, ${r.description}, ${r.descriptionRaw}, ${r.currencyCode},
+                ${tid}::uuid, ${r.id}, ${r.accountId}, ${r.description}, ${r.descriptionRaw}, ${r.currencyCode},
                 ${r.amount}, ${r.amountInAccountCurrency}, ${r.date}, ${r.category}, ${r.categoryId},
                 ${r.balance}, ${r.providerCode}, ${r.status}, ${r.type}, ${r.operationType},
                 ${r.providerId}, ${r.order}, ${r.paymentData}, ${r.ccCardNumber}, ${r.ccBillId},
@@ -267,7 +274,7 @@ export class BunPgAdapter {
           for (const r of rows) {
             await tx`
               INSERT INTO investments (
-                id, item_id, name, type, subtype, balance, currency_code,
+                tenant_id, id, item_id, name, type, subtype, balance, currency_code,
                 value, quantity, amount, taxes, taxes2,
                 amount_profit, amount_withdrawal, amount_original,
                 last_month_rate, last_twelve_months_rate, annual_rate, fixed_annual_rate, rate, rate_type,
@@ -275,7 +282,7 @@ export class BunPgAdapter {
                 issuer, issuer_cnpj, issue_date, purchase_date, due_date, date,
                 owner, institution, status, created_at, updated_at, synced_at
               ) VALUES (
-                ${r.id}, ${r.itemId}, ${r.name}, ${r.type}, ${r.subtype}, ${r.balance}, ${r.currencyCode},
+                ${tid}::uuid, ${r.id}, ${r.itemId}, ${r.name}, ${r.type}, ${r.subtype}, ${r.balance}, ${r.currencyCode},
                 ${r.value}, ${r.quantity}, ${r.amount}, ${r.taxes}, ${r.taxes2},
                 ${r.amountProfit}, ${r.amountWithdrawal}, ${r.amountOriginal},
                 ${r.lastMonthRate}, ${r.lastTwelveMonthsRate}, ${r.annualRate}, ${r.fixedAnnualRate},
@@ -316,14 +323,14 @@ export class BunPgAdapter {
           for (const r of rows) {
             await tx`
               INSERT INTO investment_transactions (
-                id, investment_id, description, amount, value, quantity,
+                tenant_id, id, investment_id, description, amount, value, quantity,
                 trade_date, date, type, net_amount, movement_type, brokerage_number, agreed_rate,
                 exp_income_tax, exp_brokerage_fee, exp_service_tax, exp_settlement_fee,
                 exp_clearing_fee, exp_stock_exchange_fee, exp_custody_fee, exp_operating_fee,
                 exp_trading_assets_notice_fee, exp_maintenance_fee, exp_other,
                 created_at, updated_at, synced_at
               ) VALUES (
-                ${r.id}, ${r.investmentId}, ${r.description}, ${r.amount}, ${r.value}, ${r.quantity},
+                ${tid}::uuid, ${r.id}, ${r.investmentId}, ${r.description}, ${r.amount}, ${r.value}, ${r.quantity},
                 ${r.tradeDate}, ${r.date}, ${r.type}, ${r.netAmount}, ${r.movementType},
                 ${r.brokerageNumber}, ${r.agreedRate},
                 ${r.expIncomeTax}, ${r.expBrokerageFee}, ${r.expServiceTax}, ${r.expSettlementFee},
@@ -1238,6 +1245,8 @@ export class BunPgAdapter {
   }
 
   async close(): Promise<void> {
-    await this.sql.close();
+    if (this.ownsSql) {
+      await this.sql.close();
+    }
   }
 }

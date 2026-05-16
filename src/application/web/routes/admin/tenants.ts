@@ -1,3 +1,4 @@
+import { SQL } from "bun";
 import { hash } from "bcryptjs";
 import { BunPgAdapter } from "../../../../infrastructure/db/BunPgAdapter.ts";
 import { requireSuperAdmin } from "../../auth-middleware.ts";
@@ -17,16 +18,16 @@ function normalizeTenantResponse(tenant: Record<string, unknown>): Record<string
   return { ...tenant, status: normalizeStatusForResponse(tenant.status as string) };
 }
 
-export async function handleListTenants(req: Request): Promise<Response> {
+export async function handleListTenants(req: Request, sql: SQL): Promise<Response> {
   const auth = await requireSuperAdmin(req);
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
-  const db = new BunPgAdapter();
+  const db = new BunPgAdapter(undefined, sql);
   const tenants = await db.tenants.findAll();
   return jsonResponse(tenants.map(normalizeTenantResponse));
 }
 
-export async function handleCreateTenant(req: Request): Promise<Response> {
+export async function handleCreateTenant(req: Request, sql: SQL): Promise<Response> {
   const auth = await requireSuperAdmin(req);
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
@@ -50,7 +51,7 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
 
   const password_hash = await hash(password, 10);
 
-  const db = new BunPgAdapter();
+  const db = new BunPgAdapter(undefined, sql);
   try {
     const tenant = await db.tenants.create({
       name,
@@ -69,7 +70,7 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
   }
 }
 
-export async function handleToggleTenantStatus(req: Request, url: URL): Promise<Response> {
+export async function handleToggleTenantStatus(req: Request, url: URL, sql: SQL): Promise<Response> {
   const auth = await requireSuperAdmin(req);
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
@@ -89,7 +90,7 @@ export async function handleToggleTenantStatus(req: Request, url: URL): Promise<
   }
 
   const status = normalizeStatusForDb(rawStatus);
-  const db = new BunPgAdapter();
+  const db = new BunPgAdapter(undefined, sql);
   const tenant = await db.tenants.setStatus(id, status);
   if (!tenant) return errorResponse("Tenant não encontrado", 404);
 

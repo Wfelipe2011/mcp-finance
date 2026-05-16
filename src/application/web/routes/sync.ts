@@ -1,10 +1,11 @@
+import { SQL } from "bun";
 import { BunPgAdapter } from "../../../infrastructure/db/BunPgAdapter.ts";
 import { TokenHttpAdapter } from "../../../infrastructure/token/TokenHttpAdapter.ts";
 import { SyncUseCase } from "../../sync/SyncUseCase.ts";
 import { jsonResponse, errorResponse } from "../helpers.ts";
 
-export async function handleSync(_req: Request, tenantId: string): Promise<Response> {
-  const db = new BunPgAdapter(tenantId);
+export async function handleSync(_req: Request, tenantId: string, sql: SQL): Promise<Response> {
+  const db = new BunPgAdapter(tenantId, sql);
   try {
     const tokenPort = new TokenHttpAdapter(tenantId);
     const useCase = new SyncUseCase({
@@ -23,7 +24,5 @@ export async function handleSync(_req: Request, tenantId: string): Promise<Respo
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return errorResponse(msg, 500);
-  } finally {
-    await db.close();
   }
 }

@@ -1,8 +1,9 @@
+import { SQL } from "bun";
 import { BunPgAdapter } from "../../../infrastructure/db/BunPgAdapter.ts";
 import { jsonResponse, errorResponse } from "../helpers.ts";
 
-export async function handleGetUsers(_req: Request, tenantId: string): Promise<Response> {
-  const db = new BunPgAdapter(tenantId);
+export async function handleGetUsers(_req: Request, tenantId: string, sql: SQL): Promise<Response> {
+  const db = new BunPgAdapter(tenantId, sql);
   try {
     const users = await db.users.getAll();
     return jsonResponse(users);
@@ -12,8 +13,8 @@ export async function handleGetUsers(_req: Request, tenantId: string): Promise<R
   }
 }
 
-export async function handleUpdateUser(req: Request, url: URL, tenantId: string): Promise<Response> {
-  const db = new BunPgAdapter(tenantId);
+export async function handleUpdateUser(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
+  const db = new BunPgAdapter(tenantId, sql);
   const segments = url.pathname.split("/");
   const idStr = segments[segments.length - 1];
   const id = idStr ? parseInt(idStr, 10) : NaN;

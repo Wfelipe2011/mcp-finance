@@ -5,20 +5,25 @@ import { verifyAuth } from "./auth-middleware.ts";
 
 const PORT = parseInt(process.env["PORT"] ?? "3001", 10);
 
+const dbUrl = process.env["DATABASE_URL"];
+if (!dbUrl) throw new Error("DATABASE_URL is not set");
+const sharedSql = new SQL(dbUrl);
+
+process.on("SIGTERM", async () => { await sharedSql.close(); process.exit(0); });
+process.on("SIGINT",  async () => { await sharedSql.close(); process.exit(0); });
+
 async function tenantExists(tenantId: string): Promise<boolean> {
-  const url = process.env["DATABASE_URL"];
-  if (!url) return false;
-  const sql = new SQL(url);
   try {
-    const rows = await sql<{ id: string }[]>`SELECT id FROM tenants WHERE id = ${tenantId}::uuid LIMIT 1`;
+    const rows = await sharedSql<{ id: string }[]>`SELECT id FROM tenants WHERE id = ${tenantId}::uuid LIMIT 1`;
     return rows.length > 0;
-  } finally {
-    await sql.close();
+  } catch {
+    return false;
   }
 }
 
 const server = Bun.serve({
   port: PORT,
+  idleTimeout: 30,
   async fetch(req) {
     const url = new URL(req.url);
 
@@ -36,18 +41,18 @@ const server = Bun.serve({
 
     // Admin panel (no auth required — JS handles it client-side)
     if (url.pathname === "/admin" && req.method === "GET") {
-      return router(req, url, "");
+      return router(req, url, "", sharedSql);
     }
 
     // Route API requests
     if (url.pathname.startsWith("/api/")) {
       // Public endpoints (no tenant auth required)
       if (url.pathname === "/api/auth/login" || url.pathname === "/api/admin/login") {
-        return router(req, url, "");
+        return router(req, url, "", sharedSql);
       }
       // Admin endpoints use their own auth (requireSuperAdmin)
       if (url.pathname.startsWith("/api/admin/")) {
-        return router(req, url, "");
+        return router(req, url, "", sharedSql);
       }
       const auth = await verifyAuth(req);
       if (!auth.valid) {
@@ -63,7 +68,7 @@ const server = Bun.serve({
           headers: { "Content-Type": "application/json" },
         });
       }
-      return router(req, url, auth.tenantId);
+      return router(req, url, auth.tenantId, sharedSql);
     }
 
     // Serve static files (SPA fallback)
