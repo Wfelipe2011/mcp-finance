@@ -4,6 +4,7 @@ import { serveAdminPanel } from "./routes/admin/panel.ts";
 import { handleAdminLogin } from "./routes/admin/login.ts";
 import { handleCreateWorker, handleListWorkers, handleUpdateWorker, handleDeleteWorker, handleQueueStats } from "./routes/admin/workers.ts";
 import { handleListTenants, handleCreateTenant, handleToggleTenantStatus } from "./routes/admin/tenants.ts";
+import { handleDigestEnqueue, handleDigestQueueStats, handleForecastEnqueue, handleForecastQueueStats, handleMlEnqueue, handleMlQueueStats } from "./routes/admin/pipeline-queues.ts";
 import { handleCashflow, handleCashflowProjetado } from "./routes/cashflow.ts";
 import { handleGastos } from "./routes/gastos.ts";
 import { handleCompromissos } from "./routes/compromissos.ts";
@@ -37,6 +38,12 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path.startsWith("/api/admin/workers/") && req.method === "PATCH") return handleUpdateWorker(req, url, sql);
   if (path.startsWith("/api/admin/workers/") && req.method === "DELETE") return handleDeleteWorker(req, url, sql);
   if (path === "/api/admin/queue-stats" && req.method === "GET") return handleQueueStats(req, sql);
+  if (path === "/api/admin/digest/enqueue" && req.method === "POST") return handleDigestEnqueue(req, sql);
+  if (path === "/api/admin/digest/queue-stats" && req.method === "GET") return handleDigestQueueStats(req, sql);
+  if (path === "/api/admin/forecast/enqueue" && req.method === "POST") return handleForecastEnqueue(req, sql);
+  if (path === "/api/admin/forecast/queue-stats" && req.method === "GET") return handleForecastQueueStats(req, sql);
+  if (path === "/api/admin/ml/enqueue" && req.method === "POST") return handleMlEnqueue(req, sql);
+  if (path === "/api/admin/ml/queue-stats" && req.method === "GET") return handleMlQueueStats(req, sql);
 
   if (path === "/api/sync" && req.method === "POST") return handleSync(req, tenantId, sql);
   if (path === "/api/users" && req.method === "GET") return handleGetUsers(req, tenantId, sql);

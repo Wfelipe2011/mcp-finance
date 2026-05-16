@@ -21,7 +21,7 @@ async function findActiveWorkers(): Promise<WorkerRow[]> {
   const sql = new SQL(getDbUrl());
   try {
     return await sql<WorkerRow[]>`
-      SELECT id, name, ai_base_url, ai_api_key, ai_model, status, error_count,
+      SELECT id, name, ai_base_url, ai_api_key, ai_model, kind, status, error_count,
              last_error, jobs_done, last_seen_at, created_at
       FROM workers
       WHERE status IN ('idle', 'busy')
@@ -69,8 +69,15 @@ function spawnWorker(worker: WorkerRow): ReturnType<typeof Bun.spawn> {
   };
   if (worker.ai_api_key) env["AI_API_KEY"] = worker.ai_api_key;
 
+  const scriptMap: Record<string, string> = {
+    enrich:   "src/application/workers/enrich-worker.ts",
+    digest:   "src/application/workers/digest-worker.ts",
+    forecast: "src/application/workers/forecast-worker.ts",
+  };
+  const script = scriptMap[worker.kind] ?? scriptMap["enrich"]!;
+
   const proc = Bun.spawn(
-    ["bun", "run", "src/application/workers/enrich-worker.ts"],
+    ["bun", "run", script],
     {
       cwd: process.cwd(),
       env,

@@ -96,9 +96,9 @@ const html = /* html */ `<!DOCTYPE html>
 
   <!-- Workers -->
   <section id="workers-section">
-    <h2>Workers</h2>
+    <h2>Workers (Enrich)</h2>
 
-    <!-- Fila -->
+    <!-- Fila Enrich -->
     <div id="queue-card" class="queue-card">
       <div class="queue-grid">
         <div class="queue-stat">
@@ -171,6 +171,58 @@ const html = /* html */ `<!DOCTYPE html>
       </form>
     </details>
   </section>
+
+  <!-- Digest Queue -->
+  <section id="digest-queue-section">
+    <h2>Digest Queue</h2>
+    <div class="queue-card">
+      <div class="queue-grid">
+        <div class="queue-stat"><span class="queue-label">Pendentes</span><span class="queue-value" id="dq-pending">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Executando</span><span class="queue-value" id="dq-running">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Concluídos</span><span class="queue-value" id="dq-done">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Erros</span><span class="queue-value" id="dq-error">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Ignorados</span><span class="queue-value" id="dq-skipped">—</span></div>
+      </div>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+        <button class="btn-primary" id="digest-enqueue-btn">Enqueue Digest</button>
+        <span id="digest-enqueue-msg" style="font-size: 13px; color: #16a34a;"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Forecast Queue -->
+  <section id="forecast-queue-section">
+    <h2>Forecast Queue</h2>
+    <div class="queue-card">
+      <div class="queue-grid">
+        <div class="queue-stat"><span class="queue-label">Pendentes</span><span class="queue-value" id="fq-pending">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Executando</span><span class="queue-value" id="fq-running">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Concluídos</span><span class="queue-value" id="fq-done">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Erros</span><span class="queue-value" id="fq-error">—</span></div>
+      </div>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+        <button class="btn-primary" id="forecast-enqueue-btn">Enqueue Forecast</button>
+        <span id="forecast-enqueue-msg" style="font-size: 13px; color: #16a34a;"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ML Training Queue -->
+  <section id="ml-queue-section">
+    <h2>ML Training</h2>
+    <div class="queue-card">
+      <div class="queue-grid">
+        <div class="queue-stat"><span class="queue-label">Pendentes</span><span class="queue-value" id="mlq-pending">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Executando</span><span class="queue-value" id="mlq-running">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Concluídos</span><span class="queue-value" id="mlq-done">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Erros</span><span class="queue-value" id="mlq-error">—</span></div>
+      </div>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+        <button class="btn-primary" id="ml-enqueue-btn">Enqueue Training</button>
+        <span id="ml-enqueue-msg" style="font-size: 13px; color: #16a34a;"></span>
+      </div>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -236,7 +288,7 @@ const html = /* html */ `<!DOCTYPE html>
 
   // ── Load all ───────────────────────────────────────────────────────────────
   async function loadAll() {
-    await Promise.all([loadTenants(), loadWorkers(), loadQueueStats()]);
+    await Promise.all([loadTenants(), loadWorkers(), loadQueueStats(), loadDigestStats(), loadForecastStats(), loadMlStats()]);
   }
 
   // ── Tenants ────────────────────────────────────────────────────────────────
@@ -464,7 +516,12 @@ const html = /* html */ `<!DOCTYPE html>
   function startWorkersRefresh() {
     stopWorkersRefresh();
     workersRefreshInterval = setInterval(() => loadWorkers(), 30_000);
-    queueRefreshInterval = setInterval(() => loadQueueStats(), 30_000);
+    queueRefreshInterval = setInterval(() => {
+      loadQueueStats();
+      loadDigestStats();
+      loadForecastStats();
+      loadMlStats();
+    }, 30_000);
   }
 
   function stopWorkersRefresh() {
@@ -525,6 +582,112 @@ const html = /* html */ `<!DOCTYPE html>
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  // ── Digest Queue ───────────────────────────────────────────────────────────
+  async function loadDigestStats() {
+    try {
+      const res = await fetch(API + '/api/admin/digest/queue-stats', { headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const s = await res.json();
+      document.getElementById('dq-pending').textContent = (s.pending ?? 0).toLocaleString('pt-BR');
+      document.getElementById('dq-running').textContent = (s.running ?? 0).toLocaleString('pt-BR');
+      document.getElementById('dq-done').textContent = (s.done ?? 0).toLocaleString('pt-BR');
+      document.getElementById('dq-error').textContent = (s.error ?? 0).toLocaleString('pt-BR');
+      document.getElementById('dq-skipped').textContent = (s.skipped ?? 0).toLocaleString('pt-BR');
+    } catch { /* fail silently */ }
+  }
+
+  document.getElementById('digest-enqueue-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('digest-enqueue-btn');
+    const msg = document.getElementById('digest-enqueue-msg');
+    btn.disabled = true;
+    msg.textContent = 'Enfileirando...';
+    msg.style.color = '#6b7280';
+    try {
+      const res = await fetch(API + '/api/admin/digest/enqueue', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const data = await res.json();
+      msg.textContent = data.enqueued + ' job(s) enfileirado(s) para ' + data.eligible + ' tenant(s)';
+      msg.style.color = '#16a34a';
+      loadDigestStats();
+    } catch {
+      msg.textContent = 'Erro ao enfileirar';
+      msg.style.color = '#dc2626';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { msg.textContent = ''; }, 5000);
+    }
+  });
+
+  // ── Forecast Queue ─────────────────────────────────────────────────────────
+  async function loadForecastStats() {
+    try {
+      const res = await fetch(API + '/api/admin/forecast/queue-stats', { headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const s = await res.json();
+      document.getElementById('fq-pending').textContent = (s.pending ?? 0).toLocaleString('pt-BR');
+      document.getElementById('fq-running').textContent = (s.running ?? 0).toLocaleString('pt-BR');
+      document.getElementById('fq-done').textContent = (s.done ?? 0).toLocaleString('pt-BR');
+      document.getElementById('fq-error').textContent = (s.error ?? 0).toLocaleString('pt-BR');
+    } catch { /* fail silently */ }
+  }
+
+  document.getElementById('forecast-enqueue-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('forecast-enqueue-btn');
+    const msg = document.getElementById('forecast-enqueue-msg');
+    btn.disabled = true;
+    msg.textContent = 'Enfileirando...';
+    msg.style.color = '#6b7280';
+    try {
+      const res = await fetch(API + '/api/admin/forecast/enqueue', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const data = await res.json();
+      msg.textContent = data.enqueued + ' job(s) enfileirado(s) para ' + data.date;
+      msg.style.color = '#16a34a';
+      loadForecastStats();
+    } catch {
+      msg.textContent = 'Erro ao enfileirar';
+      msg.style.color = '#dc2626';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { msg.textContent = ''; }, 5000);
+    }
+  });
+
+  // ── ML Training Queue ──────────────────────────────────────────────────────
+  async function loadMlStats() {
+    try {
+      const res = await fetch(API + '/api/admin/ml/queue-stats', { headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const s = await res.json();
+      document.getElementById('mlq-pending').textContent = (s.pending ?? 0).toLocaleString('pt-BR');
+      document.getElementById('mlq-running').textContent = (s.running ?? 0).toLocaleString('pt-BR');
+      document.getElementById('mlq-done').textContent = (s.done ?? 0).toLocaleString('pt-BR');
+      document.getElementById('mlq-error').textContent = (s.error ?? 0).toLocaleString('pt-BR');
+    } catch { /* fail silently */ }
+  }
+
+  document.getElementById('ml-enqueue-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ml-enqueue-btn');
+    const msg = document.getElementById('ml-enqueue-msg');
+    btn.disabled = true;
+    msg.textContent = 'Enfileirando...';
+    msg.style.color = '#6b7280';
+    try {
+      const res = await fetch(API + '/api/admin/ml/enqueue', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const data = await res.json();
+      msg.textContent = data.enqueued + ' job(s) enfileirado(s)';
+      msg.style.color = '#16a34a';
+      loadMlStats();
+    } catch {
+      msg.textContent = 'Erro ao enfileirar';
+      msg.style.color = '#dc2626';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { msg.textContent = ''; }, 5000);
+    }
+  });
 
   // ── Init ───────────────────────────────────────────────────────────────────
   if (getToken()) {

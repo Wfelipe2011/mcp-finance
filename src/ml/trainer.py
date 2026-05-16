@@ -22,7 +22,6 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-import schedule
 
 logging.basicConfig(
     level=logging.INFO,
@@ -413,17 +412,173 @@ def train_all_tenants() -> None:
 
 
 # ──────────────────────────────────────────────────────────
-# 3.9 Scheduler — daily at 00:00 BRT (03:00 UTC)
+# Queue functions — ml_training_jobs
+# ──────────────────────────────────────────────────────────
+
+def next_training_job() -> dict | None:
+    """Claim next pending ml_training_job (FOR UPDATE SKIP LOCKED)."""
+    sql = """
+        WITH next AS (
+            SELECT id, tenant_id
+            FROM ml_training_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        )
+        UPDATE ml_training_jobs SET
+            status = 'running',
+            started_at = NOW(),
+            attempts = attempts + 1
+        FROM next
+        WHERE ml_training_jobs.id = next.id
+        RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id
+    """
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql)
+            conn.commit()
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def mark_training_done(job_id: int, mae: float, mape: float) -> None:
+    """Mark ml_training_job as done with metrics."""
+    sql = """
+        UPDATE ml_training_jobs
+        SET status = 'done', finished_at = NOW(), mae = %s, mape = %s
+        WHERE id = %s
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (mae, mape, job_id))
+        conn.commit()
+
+
+def mark_training_error(job_id: int, msg: str) -> None:
+    """Mark ml_training_job as error or back to pending if retryable."""
+    sql = """
+        UPDATE ml_training_jobs SET
+            error_msg = %s,
+            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
+            started_at = NULL
+        WHERE id = %s
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (msg[:500], job_id))
+        conn.commit()
+
+
+def release_stuck_jobs() -> None:
+    """Release ml_training_jobs stuck in 'running' for more than 10 minutes."""
+    sql = """
+        UPDATE ml_training_jobs SET status = 'pending', started_at = NULL
+        WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+
+
+def enqueue_all_tenants() -> int:
+    """Insert ml_training_jobs for all active tenants (startup auto-enqueue)."""
+    tenants = get_all_tenants()
+    if not tenants:
+        return 0
+    sql = "INSERT INTO ml_training_jobs (tenant_id) VALUES %s"
+    values = [(t,) for t in tenants]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, values)
+        conn.commit()
+    logger.info(f"Auto-enqueued {len(tenants)} ml_training_jobs on startup")
+    return len(tenants)
+
+
+# ──────────────────────────────────────────────────────────
+# Main — polling loop replaces schedule
 # ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Run once immediately on startup so results are available right away
-    train_all_tenants()
+    logger.info("ML Trainer starting — polling ml_training_jobs queue")
 
-    # Schedule daily at 00:00 BRT = 03:00 UTC (Brazil abolished DST in 2019)
-    schedule.every().day.at("03:00").do(train_all_tenants)
-    logger.info("Scheduler active — next run at 03:00 UTC (00:00 BRT)")
+    # Enqueue jobs for all active tenants on startup (replaces "run once on startup")
+    enqueue_all_tenants()
 
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        try:
+            release_stuck_jobs()
+            job = next_training_job()
+
+            if job is None:
+                logger.debug("No pending jobs — sleeping 60s")
+                time.sleep(60)
+                continue
+
+            job_id = job["id"]
+            tenant_id = str(job["tenant_id"])
+            logger.info(f"Processing job={job_id} tenant={tenant_id}")
+
+            try:
+                df = load_tenant_data(tenant_id)
+
+                if df.empty:
+                    logger.warning(f"[{tenant_id}] No spending data — skipping job")
+                    with get_connection() as conn:
+                        save_model_meta(conn, tenant_id, {
+                            "months_of_history": 0,
+                            "num_categories": 0,
+                            "mae": None,
+                            "mape": None,
+                            "status": "insufficient_data",
+                            "error_message": "No spending data available",
+                        })
+                    mark_training_done(job_id, 0.0, 0.0)
+                    continue
+
+                months_of_history = df[["year", "month"]].drop_duplicates().shape[0]
+                num_categories = df["category_pt"].nunique()
+
+                if months_of_history < 3:
+                    logger.warning(f"[{tenant_id}] Only {months_of_history} month(s) — skipping job")
+                    with get_connection() as conn:
+                        save_model_meta(conn, tenant_id, {
+                            "months_of_history": months_of_history,
+                            "num_categories": num_categories,
+                            "mae": None,
+                            "mape": None,
+                            "status": "insufficient_data",
+                            "error_message": f"Insufficient history: {months_of_history} month(s) (minimum 3)",
+                        })
+                    mark_training_done(job_id, 0.0, 0.0)
+                    continue
+
+                logger.info(f"[{tenant_id}] {months_of_history} months, {num_categories} categories — training...")
+                df_features = compute_features(df)
+                pipeline, mae, mape = train_model(df_features)
+
+                predictions = generate_predictions(pipeline, df_features, tenant_id)
+                with get_connection() as conn:
+                    save_predictions(conn, predictions)
+                    save_model_meta(conn, tenant_id, {
+                        "months_of_history": months_of_history,
+                        "num_categories": num_categories,
+                        "mae": round(mae, 4),
+                        "mape": round(mape, 4),
+                        "status": "ok",
+                        "error_message": None,
+                    })
+
+                mark_training_done(job_id, round(mae, 4), round(mape, 4))
+                logger.info(f"[{tenant_id}] Done. job={job_id} MAE={mae:.2f} MAPE={mape:.2f}%")
+
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"[{tenant_id}] Training failed: {exc}", exc_info=True)
+                mark_training_error(job_id, str(exc))
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"Polling loop error: {exc}", exc_info=True)
+            time.sleep(10)
+

@@ -54,6 +54,7 @@ export interface WorkerRow {
   ai_base_url: string;
   ai_api_key: string | null;
   ai_model: string;
+  kind: string;
   status: string;
   error_count: number;
   last_error: string | null;
@@ -64,6 +65,40 @@ export interface WorkerRow {
   median_duration_7d_secs: number | null;
   avg_duration_all_secs: number | null;
   median_duration_all_secs: number | null;
+}
+
+export interface DigestJob {
+  id: number;
+  tenant_id: string;
+  year: number;
+  month: number;
+  status: string;
+  attempts: number;
+  worker_id: string | null;
+}
+
+export interface ForecastJob {
+  id: number;
+  tenant_id: string;
+  job_date: string;
+  status: string;
+  attempts: number;
+  worker_id: string | null;
+}
+
+export interface MlTrainingJob {
+  id: number;
+  tenant_id: string;
+  status: string;
+  attempts: number;
+}
+
+export interface SimpleQueueStats {
+  pending: number;
+  running: number;
+  done: number;
+  error: number;
+  skipped?: number;
 }
 
 export interface TenantRow {
@@ -224,6 +259,31 @@ export class BunPgAdapter {
     markError(jobId: number, error: string): Promise<void>;
     releaseStuck(): Promise<void>;
     getQueueStats(): Promise<QueueStats>;
+  };
+  readonly digest_jobs: {
+    enqueue(tenants: { id: string; year: number; month: number }[]): Promise<number>;
+    nextJob(workerId: string): Promise<DigestJob | null>;
+    markDone(jobId: number): Promise<void>;
+    markError(jobId: number, msg: string): Promise<void>;
+    markSkipped(jobId: number): Promise<void>;
+    releaseStuck(): Promise<void>;
+    getQueueStats(): Promise<SimpleQueueStats>;
+  };
+  readonly forecast_jobs: {
+    enqueue(tenants: { id: string }[], date: string): Promise<number>;
+    nextJob(workerId: string): Promise<ForecastJob | null>;
+    markDone(jobId: number): Promise<void>;
+    markError(jobId: number, msg: string): Promise<void>;
+    releaseStuck(): Promise<void>;
+    getQueueStats(): Promise<SimpleQueueStats>;
+  };
+  readonly ml_training_jobs: {
+    enqueue(tenants: { id: string }[]): Promise<number>;
+    nextJob(): Promise<MlTrainingJob | null>;
+    markDone(jobId: number, mae: number, mape: number): Promise<void>;
+    markError(jobId: number, msg: string): Promise<void>;
+    releaseStuck(): Promise<void>;
+    getQueueStats(): Promise<SimpleQueueStats>;
   };
 
   constructor(private readonly tenantId?: string, externalSql?: SQL) {
@@ -1022,7 +1082,7 @@ export class BunPgAdapter {
       },
       async findActive() {
         return sql<WorkerRow[]>`
-          SELECT id, name, ai_base_url, ai_api_key, ai_model, status, error_count,
+          SELECT id, name, ai_base_url, ai_api_key, ai_model, kind, status, error_count,
                  last_error, jobs_done, last_seen_at, created_at
           FROM workers
           WHERE status IN ('idle', 'busy')
@@ -1236,6 +1296,242 @@ export class BunPgAdapter {
 
         return { pending, running, done, error, total, error_rate_current, error_rate_historical,
           throughput_jobs_per_sec: null, eta_seconds: null, throughput_source: 'unavailable' };
+      },
+    };
+
+    // ── digest_jobs ───────────────────────────────────────────────────────────
+    this.digest_jobs = {
+      async enqueue(tenants) {
+        let inserted = 0;
+        for (const t of tenants) {
+          const rows = await sql`
+            INSERT INTO digest_jobs (tenant_id, year, month)
+            VALUES (${t.id}::uuid, ${t.year}, ${t.month})
+            ON CONFLICT (tenant_id, year, month) DO NOTHING
+            RETURNING id
+          `;
+          inserted += rows.length;
+        }
+        return inserted;
+      },
+
+      async nextJob(workerId) {
+        const rows = await sql<DigestJob[]>`
+          WITH next AS (
+            SELECT id, tenant_id, year, month
+            FROM digest_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          UPDATE digest_jobs SET
+            status = 'running',
+            worker_id = ${workerId}::uuid,
+            started_at = NOW(),
+            attempts = attempts + 1
+          FROM next
+          WHERE digest_jobs.id = next.id
+          RETURNING digest_jobs.id, digest_jobs.tenant_id, digest_jobs.year, digest_jobs.month,
+                    digest_jobs.status, digest_jobs.attempts, digest_jobs.worker_id
+        `;
+        return rows[0] ?? null;
+      },
+
+      async markDone(jobId) {
+        await sql`
+          UPDATE digest_jobs SET status = 'done', finished_at = NOW() WHERE id = ${jobId}
+        `;
+      },
+
+      async markError(jobId, msg) {
+        await sql`
+          UPDATE digest_jobs SET
+            error_msg = ${msg},
+            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
+            started_at = NULL, worker_id = NULL
+          WHERE id = ${jobId}
+        `;
+      },
+
+      async markSkipped(jobId) {
+        await sql`
+          UPDATE digest_jobs SET status = 'skipped', finished_at = NOW() WHERE id = ${jobId}
+        `;
+      },
+
+      async releaseStuck() {
+        await sql`
+          UPDATE digest_jobs SET status = 'pending', started_at = NULL, worker_id = NULL
+          WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
+        `;
+      },
+
+      async getQueueStats() {
+        const rows = await sql<{ status: string; cnt: string }[]>`
+          SELECT status, COUNT(*) AS cnt FROM digest_jobs GROUP BY status
+        `;
+        const c: Record<string, number> = {};
+        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
+        return {
+          pending: c['pending'] ?? 0,
+          running: c['running'] ?? 0,
+          done:    c['done']    ?? 0,
+          error:   c['error']   ?? 0,
+          skipped: c['skipped'] ?? 0,
+        };
+      },
+    };
+
+    // ── forecast_jobs ─────────────────────────────────────────────────────────
+    this.forecast_jobs = {
+      async enqueue(tenants, date) {
+        let inserted = 0;
+        for (const t of tenants) {
+          const rows = await sql`
+            INSERT INTO forecast_jobs (tenant_id, job_date)
+            VALUES (${t.id}::uuid, ${date})
+            ON CONFLICT (tenant_id, job_date) DO NOTHING
+            RETURNING id
+          `;
+          inserted += rows.length;
+        }
+        return inserted;
+      },
+
+      async nextJob(workerId) {
+        const rows = await sql<ForecastJob[]>`
+          WITH next AS (
+            SELECT id, tenant_id, job_date
+            FROM forecast_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          UPDATE forecast_jobs SET
+            status = 'running',
+            worker_id = ${workerId}::uuid,
+            started_at = NOW(),
+            attempts = attempts + 1
+          FROM next
+          WHERE forecast_jobs.id = next.id
+          RETURNING forecast_jobs.id, forecast_jobs.tenant_id, forecast_jobs.job_date,
+                    forecast_jobs.status, forecast_jobs.attempts, forecast_jobs.worker_id
+        `;
+        return rows[0] ?? null;
+      },
+
+      async markDone(jobId) {
+        await sql`
+          UPDATE forecast_jobs SET status = 'done', finished_at = NOW() WHERE id = ${jobId}
+        `;
+      },
+
+      async markError(jobId, msg) {
+        await sql`
+          UPDATE forecast_jobs SET
+            error_msg = ${msg},
+            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
+            started_at = NULL, worker_id = NULL
+          WHERE id = ${jobId}
+        `;
+      },
+
+      async releaseStuck() {
+        await sql`
+          UPDATE forecast_jobs SET status = 'pending', started_at = NULL, worker_id = NULL
+          WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
+        `;
+      },
+
+      async getQueueStats() {
+        const rows = await sql<{ status: string; cnt: string }[]>`
+          SELECT status, COUNT(*) AS cnt FROM forecast_jobs GROUP BY status
+        `;
+        const c: Record<string, number> = {};
+        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
+        return {
+          pending: c['pending'] ?? 0,
+          running: c['running'] ?? 0,
+          done:    c['done']    ?? 0,
+          error:   c['error']   ?? 0,
+        };
+      },
+    };
+
+    // ── ml_training_jobs ──────────────────────────────────────────────────────
+    this.ml_training_jobs = {
+      async enqueue(tenants) {
+        let inserted = 0;
+        for (const t of tenants) {
+          const rows = await sql`
+            INSERT INTO ml_training_jobs (tenant_id) VALUES (${t.id}::uuid) RETURNING id
+          `;
+          inserted += rows.length;
+        }
+        return inserted;
+      },
+
+      async nextJob() {
+        const rows = await sql<MlTrainingJob[]>`
+          WITH next AS (
+            SELECT id, tenant_id
+            FROM ml_training_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          UPDATE ml_training_jobs SET
+            status = 'running',
+            started_at = NOW(),
+            attempts = attempts + 1
+          FROM next
+          WHERE ml_training_jobs.id = next.id
+          RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id,
+                    ml_training_jobs.status, ml_training_jobs.attempts
+        `;
+        return rows[0] ?? null;
+      },
+
+      async markDone(jobId, mae, mape) {
+        await sql`
+          UPDATE ml_training_jobs SET status = 'done', finished_at = NOW(),
+            mae = ${mae}, mape = ${mape}
+          WHERE id = ${jobId}
+        `;
+      },
+
+      async markError(jobId, msg) {
+        await sql`
+          UPDATE ml_training_jobs SET
+            error_msg = ${msg},
+            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
+            started_at = NULL
+          WHERE id = ${jobId}
+        `;
+      },
+
+      async releaseStuck() {
+        await sql`
+          UPDATE ml_training_jobs SET status = 'pending', started_at = NULL
+          WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
+        `;
+      },
+
+      async getQueueStats() {
+        const rows = await sql<{ status: string; cnt: string }[]>`
+          SELECT status, COUNT(*) AS cnt FROM ml_training_jobs GROUP BY status
+        `;
+        const c: Record<string, number> = {};
+        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
+        return {
+          pending: c['pending'] ?? 0,
+          running: c['running'] ?? 0,
+          done:    c['done']    ?? 0,
+          error:   c['error']   ?? 0,
+        };
       },
     };
   }
