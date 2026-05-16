@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function LoginScreen({ onLogin }: Props) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export function LoginScreen({ onLogin }: Props) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = (await res.json()) as { token?: string; error?: string };
       if (!res.ok) {
@@ -71,9 +71,9 @@ export function LoginScreen({ onLogin }: Props) {
         {error && <Alert severity="error">{error}</Alert>}
 
         <TextField
-          label="Usuário"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          label="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           autoComplete="username"
           required
           fullWidth

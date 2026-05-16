@@ -78,9 +78,19 @@ export function App() {
 
   useEffect(() => {
     if (!selectedMonth) return;
+    if (!authToken || !isTokenValid(authToken)) return;
     setDigest(null);
     fetchDigest(selectedMonth).then(setDigest).catch(() => setDigest(null));
-  }, [selectedMonth]);
+  }, [selectedMonth, authToken]);
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setAuthToken(null);
+      setDigest(null);
+    };
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  }, []);
 
   async function handleSync() {
     setSyncState("loading");

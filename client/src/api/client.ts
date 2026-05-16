@@ -19,12 +19,16 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function handleUnauthorized(): never {
+  localStorage.removeItem("authToken");
+  window.dispatchEvent(new Event("auth:unauthorized"));
+  throw new Error("Unauthorized");
+}
+
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(BASE + url, { headers: authHeaders() });
   if (res.status === 401) {
-    localStorage.removeItem("authToken");
-    window.location.reload();
-    throw new Error("Unauthorized");
+    return handleUnauthorized();
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -95,9 +99,7 @@ export async function triggerSync(): Promise<SyncSummary> {
       signal: controller.signal,
     });
     if (res.status === 401) {
-      localStorage.removeItem("authToken");
-      window.location.reload();
-      throw new Error("Unauthorized");
+      return handleUnauthorized();
     }
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -120,9 +122,7 @@ export async function updateUserDisplayName(id: number, displayName: string): Pr
     body: JSON.stringify({ display_name: displayName }),
   });
   if (res.status === 401) {
-    localStorage.removeItem("authToken");
-    window.location.reload();
-    throw new Error("Unauthorized");
+    return handleUnauthorized();
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
