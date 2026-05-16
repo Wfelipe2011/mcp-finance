@@ -545,32 +545,35 @@ export class BunPgAdapter {
         const tagsLiteral = row.tags?.length
           ? "{" + row.tags.map((t) => '"' + t.replace(/"/g, '\\"') + '"').join(",") + "}"
           : null;
-        await sql`
-          INSERT INTO ai_transaction_insights (
-            tenant_id, transaction_id, merchant_name, merchant_country,
-            is_recurring, recurrence_period, expense_context,
-            is_debt_related, anomaly_score, tags, category_hint,
-            model_version, analyzed_at
-          ) VALUES (
-            current_setting('app.tenant_id')::UUID,
-            ${row.transaction_id}, ${row.merchant_name ?? null}, ${row.merchant_country ?? null},
-            ${row.is_recurring ?? null}, ${row.recurrence_period ?? null}, ${row.expense_context ?? null},
-            ${row.is_debt_related}, ${row.anomaly_score ?? null}, ${tagsLiteral}::text[], ${row.category_hint ?? null},
-            ${row.model_version}, NOW()
-          )
-          ON CONFLICT (tenant_id, transaction_id) DO UPDATE SET
-            merchant_name     = EXCLUDED.merchant_name,
-            merchant_country  = EXCLUDED.merchant_country,
-            is_recurring      = EXCLUDED.is_recurring,
-            recurrence_period = EXCLUDED.recurrence_period,
-            expense_context   = EXCLUDED.expense_context,
-            is_debt_related   = EXCLUDED.is_debt_related,
-            anomaly_score     = EXCLUDED.anomaly_score,
-            tags              = EXCLUDED.tags,
-            category_hint     = EXCLUDED.category_hint,
-            model_version     = EXCLUDED.model_version,
-            analyzed_at       = NOW()
-        `;
+        await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          await tx`
+            INSERT INTO ai_transaction_insights (
+              tenant_id, transaction_id, merchant_name, merchant_country,
+              is_recurring, recurrence_period, expense_context,
+              is_debt_related, anomaly_score, tags, category_hint,
+              model_version, analyzed_at
+            ) VALUES (
+              ${tid}::uuid,
+              ${row.transaction_id}, ${row.merchant_name ?? null}, ${row.merchant_country ?? null},
+              ${row.is_recurring ?? null}, ${row.recurrence_period ?? null}, ${row.expense_context ?? null},
+              ${row.is_debt_related}, ${row.anomaly_score ?? null}, ${tagsLiteral}::text[], ${row.category_hint ?? null},
+              ${row.model_version}, NOW()
+            )
+            ON CONFLICT (tenant_id, transaction_id) DO UPDATE SET
+              merchant_name     = EXCLUDED.merchant_name,
+              merchant_country  = EXCLUDED.merchant_country,
+              is_recurring      = EXCLUDED.is_recurring,
+              recurrence_period = EXCLUDED.recurrence_period,
+              expense_context   = EXCLUDED.expense_context,
+              is_debt_related   = EXCLUDED.is_debt_related,
+              anomaly_score     = EXCLUDED.anomaly_score,
+              tags              = EXCLUDED.tags,
+              category_hint     = EXCLUDED.category_hint,
+              model_version     = EXCLUDED.model_version,
+              analyzed_at       = NOW()
+          `;
+        });
       },
     };
 
