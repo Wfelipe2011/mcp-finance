@@ -207,6 +207,23 @@ const html = /* html */ `<!DOCTYPE html>
     </div>
   </section>
 
+  <!-- Daily Insight Queue -->
+  <section id="daily-insight-queue-section">
+    <h2>Daily Insight Queue</h2>
+    <div class="queue-card">
+      <div class="queue-grid">
+        <div class="queue-stat"><span class="queue-label">Pendentes</span><span class="queue-value" id="diq-pending">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Executando</span><span class="queue-value" id="diq-running">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Concluídos</span><span class="queue-value" id="diq-done">—</span></div>
+        <div class="queue-stat"><span class="queue-label">Erros</span><span class="queue-value" id="diq-error">—</span></div>
+      </div>
+      <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+        <button class="btn-primary" id="daily-insight-enqueue-btn">Enqueue Daily Insight</button>
+        <span id="daily-insight-enqueue-msg" style="font-size: 13px; color: #16a34a;"></span>
+      </div>
+    </div>
+  </section>
+
   <!-- ML Training Queue -->
   <section id="ml-queue-section">
     <h2>ML Training</h2>
@@ -288,7 +305,7 @@ const html = /* html */ `<!DOCTYPE html>
 
   // ── Load all ───────────────────────────────────────────────────────────────
   async function loadAll() {
-    await Promise.all([loadTenants(), loadWorkers(), loadQueueStats(), loadDigestStats(), loadForecastStats(), loadMlStats()]);
+    await Promise.all([loadTenants(), loadWorkers(), loadQueueStats(), loadDigestStats(), loadForecastStats(), loadMlStats(), loadDailyInsightStats()]);
   }
 
   // ── Tenants ────────────────────────────────────────────────────────────────
@@ -521,6 +538,7 @@ const html = /* html */ `<!DOCTYPE html>
       loadDigestStats();
       loadForecastStats();
       loadMlStats();
+      loadDailyInsightStats();
     }, 30_000);
   }
 
@@ -686,6 +704,41 @@ const html = /* html */ `<!DOCTYPE html>
       msg.textContent = data.enqueued + ' job(s) enfileirado(s)';
       msg.style.color = '#16a34a';
       loadMlStats();
+    } catch {
+      msg.textContent = 'Erro ao enfileirar';
+      msg.style.color = '#dc2626';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { msg.textContent = ''; }, 5000);
+    }
+  });
+
+  // ── Daily Insight Queue ──────────────────────────────────────────────────
+  async function loadDailyInsightStats() {
+    try {
+      const res = await fetch(API + '/api/admin/daily-insight/queue-stats', { headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const s = await res.json();
+      document.getElementById('diq-pending').textContent = (s.pending ?? 0).toLocaleString('pt-BR');
+      document.getElementById('diq-running').textContent = (s.running ?? 0).toLocaleString('pt-BR');
+      document.getElementById('diq-done').textContent = (s.done ?? 0).toLocaleString('pt-BR');
+      document.getElementById('diq-error').textContent = (s.error ?? 0).toLocaleString('pt-BR');
+    } catch { /* fail silently */ }
+  }
+
+  document.getElementById('daily-insight-enqueue-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('daily-insight-enqueue-btn');
+    const msg = document.getElementById('daily-insight-enqueue-msg');
+    btn.disabled = true;
+    msg.textContent = 'Enfileirando...';
+    msg.style.color = '#6b7280';
+    try {
+      const res = await fetch(API + '/api/admin/daily-insight/enqueue', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const data = await res.json();
+      msg.textContent = data.enqueued + ' job(s) enfileirado(s) para ' + data.tenants + ' tenant(s) (' + data.date + ')';
+      msg.style.color = '#16a34a';
+      loadDailyInsightStats();
     } catch {
       msg.textContent = 'Erro ao enfileirar';
       msg.style.color = '#dc2626';

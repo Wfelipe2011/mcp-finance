@@ -31,6 +31,7 @@ import { ProximoMes } from "./tabs/ProximoMes.tsx";
 import { Previsao } from "./tabs/Previsao.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
 import { Insights } from "./tabs/Insights.tsx";
+import Treinar from "./tabs/Treinar.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
 import { createAppTheme, type AppColorMode } from "./theme.ts";
@@ -151,6 +152,7 @@ export function App() {
     <Previsao />,
     selectedMonth ? <Investimentos month={selectedMonth} /> : null,
     selectedMonth ? <Insights month={selectedMonth} digest={digest} /> : null,
+    <Treinar />,
   ];
 
   return (
@@ -251,6 +253,7 @@ export function App() {
             <BottomNavigationAction label="Previsão" icon={<TrendingUpRoundedIcon />} />
             <BottomNavigationAction label="Investimentos" icon={<ShowChartRoundedIcon />} />
             <BottomNavigationAction label="Insights" icon={<AutoAwesomeRoundedIcon />} />
+            <BottomNavigationAction label="🧠 Treinar" icon={<AutoAwesomeRoundedIcon />} />
           </BottomNavigation>
         </Paper>
       </Box>

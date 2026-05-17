@@ -201,3 +201,49 @@ export interface ForecastMessage {
   message_pt?: string;
   message_date?: string;
 }
+
+export interface SecondaryInsight {
+  category_pt: string;
+  group_pt: string;
+  probability: number;
+  estimated_amount: number;
+  lower_bound: number;
+  upper_bound: number;
+}
+
+export interface DailyInsight {
+  has_insight: boolean;
+  insight_type: string;
+  message_pt: string;
+  category_pt: string | null;
+  group_pt: string | null;
+  probability: number | null;
+  estimated_amount: number | null;
+  lower_bound: number | null;
+  upper_bound: number | null;
+  signal_count: number | null;
+  period_months: number;
+  insight_date: string;
+  secondary_insights: SecondaryInsight[];
+}
+
+export interface ForecastDeviation {
+  prediction_id: number;
+  category_pt: string;
+  group_pt: string;
+  predicted_amount: number;
+  actual_amount: number;
+  deviation_pct: number;
+  user_rating: string | null;
+  correction_tag: string | null;
+}
+
+export interface FeedbackItem {
+  prediction_id: number;
+  rating: 'up' | 'down';
+  correction_tag?: string | null;
+}
+
+export interface FeedbackResponse {
+  saved: number;
+}

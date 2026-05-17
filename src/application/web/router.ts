@@ -4,7 +4,7 @@ import { serveAdminPanel } from "./routes/admin/panel.ts";
 import { handleAdminLogin } from "./routes/admin/login.ts";
 import { handleCreateWorker, handleListWorkers, handleUpdateWorker, handleDeleteWorker, handleQueueStats } from "./routes/admin/workers.ts";
 import { handleListTenants, handleCreateTenant, handleToggleTenantStatus } from "./routes/admin/tenants.ts";
-import { handleDigestEnqueue, handleDigestQueueStats, handleForecastEnqueue, handleForecastQueueStats, handleMlEnqueue, handleMlQueueStats } from "./routes/admin/pipeline-queues.ts";
+import { handleDigestEnqueue, handleDigestQueueStats, handleForecastEnqueue, handleForecastQueueStats, handleMlEnqueue, handleMlQueueStats, handleDailyInsightEnqueue, handleDailyInsightQueueStats } from "./routes/admin/pipeline-queues.ts";
 import { handleCashflow, handleCashflowProjetado } from "./routes/cashflow.ts";
 import { handleGastos } from "./routes/gastos.ts";
 import { handleCompromissos } from "./routes/compromissos.ts";
@@ -21,6 +21,8 @@ import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
 import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
+import { handleForecastDaily } from "./routes/forecast/daily.ts";
+import { handleForecastFeedbackDeviations, handleForecastFeedbackSave, handleForecastFeedbackRetrain } from "./routes/forecast/feedback.ts";
 
 export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
   const path = url.pathname;
@@ -44,6 +46,8 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/admin/forecast/queue-stats" && req.method === "GET") return handleForecastQueueStats(req, sql);
   if (path === "/api/admin/ml/enqueue" && req.method === "POST") return handleMlEnqueue(req, sql);
   if (path === "/api/admin/ml/queue-stats" && req.method === "GET") return handleMlQueueStats(req, sql);
+  if (path === "/api/admin/daily-insight/enqueue" && req.method === "POST") return handleDailyInsightEnqueue(req, sql);
+  if (path === "/api/admin/daily-insight/queue-stats" && req.method === "GET") return handleDailyInsightQueueStats(req, sql);
 
   if (path === "/api/sync" && req.method === "POST") return handleSync(req, tenantId, sql);
   if (path === "/api/users" && req.method === "GET") return handleGetUsers(req, tenantId, sql);
@@ -62,6 +66,10 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/groups" && req.method === "GET") return handleForecastGroups(req, tenantId, sql);
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
+  if (path === "/api/forecast/daily" && req.method === "GET") return handleForecastDaily(req, tenantId, sql);
+  if (path === "/api/forecast/feedback/deviations" && req.method === "GET") return handleForecastFeedbackDeviations(req, url, tenantId, sql);
+  if (path === "/api/forecast/feedback" && req.method === "POST") return handleForecastFeedbackSave(req, tenantId, sql);
+  if (path === "/api/forecast/feedback/retrain" && req.method === "POST") return handleForecastFeedbackRetrain(req, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }

@@ -293,6 +293,201 @@ def save_model_meta(conn, tenant_id: str, meta: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────
+# Daily predictions helpers
+# ──────────────────────────────────────────────────────────
+
+def load_daily_habit_signals(tenant_id: str) -> pd.DataFrame:
+    """Query the daily_habit_signals VIEW for a given tenant."""
+    sql = """
+        SELECT
+            tenant_id,
+            day_of_week,
+            day_of_month,
+            category_pt,
+            group_pt,
+            occurrences,
+            avg_amount,
+            std_amount,
+            occurrences_6m
+        FROM daily_habit_signals
+        WHERE tenant_id = %s
+    """
+    with get_connection() as conn:
+        df = pd.read_sql(sql, conn, params=(tenant_id,))
+    for col in ["avg_amount", "std_amount"]:
+        df[col] = df[col].astype(float)
+    return df
+
+
+def generate_daily_predictions(
+    pipeline, df_signals: pd.DataFrame, tenant_id: str, days: int = 30
+) -> list[dict]:
+    """
+    Generate daily predictions for the next `days` days per category.
+    Uses the RandomForest pipeline from monthly training to estimate probability
+    as the fraction of trees predicting a positive outcome.
+    Returns list of dicts matching forecast_daily_predictions schema.
+    """
+    from datetime import date, timedelta
+
+    if df_signals.empty:
+        return []
+
+    today = date.today()
+    rf = pipeline.named_steps["model"]
+    preprocessor = pipeline.named_steps["preprocessor"]
+
+    results = []
+
+    for d in range(1, days + 1):
+        target_date = today + timedelta(days=d)
+        dow = target_date.weekday()  # 0=Monday..6=Sunday (Python)
+        dom = target_date.day
+
+        # Match signals for this day_of_week or day_of_month
+        day_signals = df_signals[
+            (df_signals["day_of_week"] == dow) |
+            (df_signals["day_of_month"] == dom)
+        ].drop_duplicates(subset=["category_pt"])
+
+        for _, sig in day_signals.iterrows():
+            cat = sig["category_pt"]
+            grp = sig["group_pt"]
+            avg_amt = float(sig["avg_amount"])
+            std_amt = float(sig["std_amount"]) if sig["std_amount"] else 0.0
+            total_meses_hist = 1  # placeholder — use avg_amount as proxy
+
+            X_pred = pd.DataFrame([{
+                "mes_do_ano": target_date.month,
+                "media_3m_categoria": avg_amt,
+                "total_meses_hist": total_meses_hist,
+                "category_pt": cat,
+                "group_pt": grp,
+            }])
+
+            try:
+                X_transformed = preprocessor.transform(X_pred)
+                tree_preds = np.array(
+                    [tree.predict(X_transformed)[0] for tree in rf.estimators_]
+                )
+            except Exception:
+                # Category not seen during training — use signal stats
+                tree_preds = np.array([avg_amt] * len(rf.estimators_))
+
+            predicted = max(0.0, float(np.mean(tree_preds)))
+            std = float(np.std(tree_preds))
+            lower = max(0.0, predicted - 2 * std)
+            upper = predicted + 2 * std
+
+            # Probability = fraction of trees predicting positive (>0)
+            probability = float(np.mean(tree_preds > 0))
+
+            results.append({
+                "tenant_id": tenant_id,
+                "prediction_date": target_date.isoformat(),
+                "category_pt": cat,
+                "group_pt": grp,
+                "predicted_amount": round(predicted, 2),
+                "lower_bound": round(lower, 2),
+                "upper_bound": round(upper, 2),
+                "probability": round(min(1.0, max(0.0, probability)), 4),
+                "model_version": MODEL_VERSION,
+            })
+
+    return results
+
+
+def load_user_feedback(tenant_id: str) -> pd.DataFrame:
+    """Load forecast_user_feedback for a tenant."""
+    sql = """
+        SELECT
+            fuf.id,
+            fuf.tenant_id,
+            fuf.prediction_id,
+            fuf.rating,
+            fuf.correction_tag,
+            fp.category_pt,
+            fp.target_year,
+            fp.target_month
+        FROM forecast_user_feedback fuf
+        JOIN forecast_predictions fp ON fp.id = fuf.prediction_id
+        WHERE fuf.tenant_id = %s
+    """
+    with get_connection() as conn:
+        df = pd.read_sql(sql, conn, params=(tenant_id,))
+    return df
+
+
+def apply_feedback_weights(df: pd.DataFrame, feedback: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply sample weights based on user feedback.
+    Up-weight 3x samples where rating='down' and correction_tag NOT IN ('Viagem', 'Evento especial').
+    Cap feedback contribution at 20% of total weight.
+    Returns df with 'sample_weight' column.
+    """
+    ATYPICAL_TAGS = {"Viagem", "Evento especial"}
+    UPWEIGHT_FACTOR = 3.0
+    MAX_FEEDBACK_FRACTION = 0.20
+
+    df = df.copy()
+    df["sample_weight"] = 1.0
+
+    if feedback.empty:
+        return df
+
+    # Find categories with negative feedback (not atypical)
+    negative_feedback = feedback[
+        (feedback["rating"] == "down") &
+        (~feedback["correction_tag"].isin(ATYPICAL_TAGS))
+    ]
+
+    if negative_feedback.empty:
+        return df
+
+    # Apply weights: match by (category_pt, mes_do_ano)
+    for _, fb_row in negative_feedback.iterrows():
+        cat = fb_row["category_pt"]
+        month = fb_row["target_month"]
+        mask = (df["category_pt"] == cat) & (df["month"] == month)
+        df.loc[mask, "sample_weight"] = UPWEIGHT_FACTOR
+
+    # Cap feedback at MAX_FEEDBACK_FRACTION of total weight
+    total_weight = df["sample_weight"].sum()
+    feedback_weight = df.loc[df["sample_weight"] > 1.0, "sample_weight"].sum()
+
+    if total_weight > 0 and feedback_weight / total_weight > MAX_FEEDBACK_FRACTION:
+        scale = (MAX_FEEDBACK_FRACTION * total_weight) / feedback_weight
+        df.loc[df["sample_weight"] > 1.0, "sample_weight"] *= scale
+
+    return df
+
+
+def save_daily_predictions(conn, predictions: list[dict]) -> None:
+    """UPSERT daily predictions into forecast_daily_predictions."""
+    if not predictions:
+        return
+    sql = """
+        INSERT INTO forecast_daily_predictions
+            (tenant_id, prediction_date, category_pt, group_pt,
+             predicted_amount, lower_bound, upper_bound, probability, model_version)
+        VALUES
+            (%(tenant_id)s, %(prediction_date)s::date, %(category_pt)s, %(group_pt)s,
+             %(predicted_amount)s, %(lower_bound)s, %(upper_bound)s, %(probability)s, %(model_version)s)
+        ON CONFLICT (tenant_id, prediction_date, category_pt) DO UPDATE SET
+            group_pt         = EXCLUDED.group_pt,
+            predicted_amount = EXCLUDED.predicted_amount,
+            lower_bound      = EXCLUDED.lower_bound,
+            upper_bound      = EXCLUDED.upper_bound,
+            probability      = EXCLUDED.probability,
+            model_version    = EXCLUDED.model_version,
+            created_at       = NOW()
+    """
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_batch(cur, sql, predictions)
+    conn.commit()
+
+
+# ──────────────────────────────────────────────────────────
 # 3.8 train_all_tenants (orchestrator)
 # 3.10 per-tenant exception handling
 # ──────────────────────────────────────────────────────────
@@ -417,29 +612,59 @@ def train_all_tenants() -> None:
 
 def next_training_job() -> dict | None:
     """Claim next pending ml_training_job (FOR UPDATE SKIP LOCKED)."""
-    sql = """
-        WITH next AS (
-            SELECT id, tenant_id
-            FROM ml_training_jobs
-            WHERE status = 'pending'
-            ORDER BY created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-        )
-        UPDATE ml_training_jobs SET
-            status = 'running',
-            started_at = NOW(),
-            attempts = attempts + 1
-        FROM next
-        WHERE ml_training_jobs.id = next.id
-        RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id
-    """
-    with get_connection() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql)
-            conn.commit()
-            row = cur.fetchone()
-            return dict(row) if row else None
+    try:
+        sql_with_trigger = """
+            WITH next AS (
+                SELECT id, tenant_id, trigger
+                FROM ml_training_jobs
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE ml_training_jobs SET
+                status = 'running',
+                started_at = NOW(),
+                attempts = attempts + 1
+            FROM next
+            WHERE ml_training_jobs.id = next.id
+            RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id, ml_training_jobs.trigger
+        """
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql_with_trigger)
+                conn.commit()
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception:
+        # Fallback: trigger column doesn't exist yet
+        sql_no_trigger = """
+            WITH next AS (
+                SELECT id, tenant_id
+                FROM ml_training_jobs
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE ml_training_jobs SET
+                status = 'running',
+                started_at = NOW(),
+                attempts = attempts + 1
+            FROM next
+            WHERE ml_training_jobs.id = next.id
+            RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id
+        """
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql_no_trigger)
+                conn.commit()
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                result = dict(row)
+                result["trigger"] = None
+                return result
 
 
 def mark_training_done(job_id: int, mae: float, mape: float) -> None:
@@ -557,6 +782,14 @@ if __name__ == "__main__":
 
                 logger.info(f"[{tenant_id}] {months_of_history} months, {num_categories} categories — training...")
                 df_features = compute_features(df)
+
+                # Apply feedback weights if triggered by user_feedback
+                job_trigger = job.get("trigger")
+                if job_trigger == "user_feedback":
+                    logger.info(f"[{tenant_id}] Applying feedback weights for job={job_id}")
+                    feedback_df = load_user_feedback(tenant_id)
+                    df_features = apply_feedback_weights(df_features, feedback_df)
+
                 pipeline, mae, mape = train_model(df_features)
 
                 predictions = generate_predictions(pipeline, df_features, tenant_id)
@@ -573,6 +806,20 @@ if __name__ == "__main__":
 
                 mark_training_done(job_id, round(mae, 4), round(mape, 4))
                 logger.info(f"[{tenant_id}] Done. job={job_id} MAE={mae:.2f} MAPE={mape:.2f}%")
+
+                # Generate daily predictions after monthly training
+                logger.info(f"[{tenant_id}] Generating daily predictions for next 30 days...")
+                try:
+                    df_signals = load_daily_habit_signals(tenant_id)
+                    if not df_signals.empty:
+                        daily_preds = generate_daily_predictions(pipeline, df_signals, tenant_id, days=30)
+                        with get_connection() as conn_daily:
+                            save_daily_predictions(conn_daily, daily_preds)
+                        logger.info(f"[{tenant_id}] Saved {len(daily_preds)} daily predictions")
+                    else:
+                        logger.info(f"[{tenant_id}] No daily habit signals — skipping daily predictions")
+                except Exception as daily_exc:
+                    logger.warning(f"[{tenant_id}] Daily predictions failed (non-fatal): {daily_exc}")
 
             except Exception as exc:  # noqa: BLE001
                 logger.error(f"[{tenant_id}] Training failed: {exc}", exc_info=True)

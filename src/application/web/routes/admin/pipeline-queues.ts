@@ -133,3 +133,47 @@ export async function handleMlQueueStats(req: Request, sql: SQL): Promise<Respon
   const stats = await db.ml_training_jobs.getQueueStats();
   return jsonResponse(stats);
 }
+
+// ── Daily Insight Queue ────────────────────────────────────────────────────
+
+export async function handleDailyInsightEnqueue(req: Request, sql: SQL): Promise<Response> {
+  const auth = await requireSuperAdmin(req);
+  if (!auth.valid) return errorResponse("Forbidden", auth.status);
+
+  const db = new BunPgAdapter(undefined, sql);
+  const tenantIds = await db.getActiveTenantsIds();
+  const today = new Date().toISOString().slice(0, 10);
+
+  let inserted = 0;
+  for (const tenantId of tenantIds) {
+    const rows = await sql.begin(async (tx) => {
+      await tx`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      return tx`
+        INSERT INTO daily_insight_jobs (tenant_id, job_date)
+        VALUES (${tenantId}::uuid, ${today}::date)
+        ON CONFLICT (tenant_id, job_date) DO NOTHING
+        RETURNING id
+      `;
+    });
+    inserted += rows.length;
+  }
+
+  return jsonResponse({ enqueued: inserted, tenants: tenantIds.length, date: today });
+}
+
+export async function handleDailyInsightQueueStats(req: Request, sql: SQL): Promise<Response> {
+  const auth = await requireSuperAdmin(req);
+  if (!auth.valid) return errorResponse("Forbidden", auth.status);
+
+  const rows = await sql<{ status: string; cnt: string }[]>`
+    SELECT status, COUNT(*) AS cnt FROM daily_insight_jobs GROUP BY status
+  `;
+  const c: Record<string, number> = {};
+  for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
+  return jsonResponse({
+    pending: c['pending'] ?? 0,
+    running: c['running'] ?? 0,
+    done:    c['done']    ?? 0,
+    error:   c['error']  ?? 0,
+  });
+}

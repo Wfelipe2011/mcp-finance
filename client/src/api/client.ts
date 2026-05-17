@@ -14,6 +14,10 @@ import type {
   ForecastGroupsResponse,
   ForecastCategoriesResponse,
   ForecastMessage,
+  DailyInsight,
+  ForecastDeviation,
+  FeedbackItem,
+  FeedbackResponse,
 } from "./types.ts";
 
 const BASE = "";
@@ -146,4 +150,45 @@ export async function updateUserDisplayName(id: number, displayName: string): Pr
     throw new Error((body as { error?: string }).error ?? res.statusText);
   }
   return res.json() as Promise<User>;
+}
+
+export async function fetchDailyInsight(): Promise<DailyInsight | null> {
+  const res = await fetch("/api/forecast/daily", { headers: authHeaders() });
+  if (res.status === 401) return handleUnauthorized();
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<DailyInsight>;
+}
+
+export function fetchDeviations(year: number, month: number): Promise<ForecastDeviation[]> {
+  return get<ForecastDeviation[]>(`/api/forecast/feedback/deviations?year=${year}&month=${month}`);
+}
+
+export async function submitFeedback(items: FeedbackItem[]): Promise<FeedbackResponse> {
+  const res = await fetch("/api/forecast/feedback", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(items),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<FeedbackResponse>;
+}
+
+export async function requestRetrain(): Promise<void> {
+  const res = await fetch("/api/forecast/feedback/retrain", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
 }
