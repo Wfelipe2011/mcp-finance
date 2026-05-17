@@ -223,6 +223,14 @@ export interface ForecastRepository {
   getTodayMessage(): Promise<ForecastAiMessage | null>;
 }
 
+function parseJsonbField<T>(value: unknown): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") {
+    try { return JSON.parse(value) as T; } catch { return null; }
+  }
+  return value as T;
+}
+
 export class BunPgAdapter {
   private readonly sql: SQL;
   private readonly ownsSql: boolean;
@@ -1755,6 +1763,8 @@ export class BunPgAdapter {
         debt_inflows:         row.debt_inflows         !== null ? Number(row.debt_inflows)         : null,
         debt_payments:        row.debt_payments        !== null ? Number(row.debt_payments)        : null,
         enrichment_coverage:  row.enrichment_coverage  !== null ? Number(row.enrichment_coverage)  : null,
+        notable_expenses:     parseJsonbField(row.notable_expenses),
+        structured_summary:   parseJsonbField(row.structured_summary),
       };
     });
   }
@@ -1910,6 +1920,8 @@ export class BunPgAdapter {
         debt_inflows:        row.debt_inflows        !== null ? Number(row.debt_inflows)        : null,
         debt_payments:       row.debt_payments       !== null ? Number(row.debt_payments)       : null,
         enrichment_coverage: row.enrichment_coverage !== null ? Number(row.enrichment_coverage) : null,
+        notable_expenses:    parseJsonbField(row.notable_expenses),
+        structured_summary:  parseJsonbField(row.structured_summary),
       };
     });
   }
@@ -1932,8 +1944,16 @@ export class BunPgAdapter {
         ) VALUES (
           ${tenantId}::uuid, ${year}, ${month},
           ${data.cashflow_real}, ${data.debt_inflows}, ${data.debt_payments},
-          ${data.narrative_pt}, ${JSON.stringify(data.structured_summary)}::jsonb,
-          ${flagsLiteral}::text[], ${JSON.stringify(data.notable_expenses)}::jsonb,
+          ${data.narrative_pt}, ${JSON.stringify(
+            typeof data.structured_summary === "string"
+              ? JSON.parse(data.structured_summary)
+              : data.structured_summary
+          )}::jsonb,
+          ${flagsLiteral}::text[], ${JSON.stringify(
+            typeof data.notable_expenses === "string"
+              ? JSON.parse(data.notable_expenses)
+              : data.notable_expenses
+          )}::jsonb,
           ${data.enrichment_coverage}, ${data.model_version}, NOW()
         )
         ON CONFLICT (tenant_id, year, month) DO UPDATE SET

@@ -3,7 +3,7 @@ import type { NotableExpense } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
 export function NotableExpenses({ expenses }: { expenses: NotableExpense[] | null | undefined }) {
-  if (!expenses || expenses.length === 0) return null;
+  if (!Array.isArray(expenses) || expenses.length === 0) return null;
 
   const highestAmount = Math.max(...expenses.map((item) => Math.abs(item.amount)), 1);
 

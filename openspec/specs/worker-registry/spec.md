@@ -220,14 +220,15 @@ O sistema SHALL ter endpoints: `POST /api/admin/workers` (cria), `GET /api/admin
 - **THEN** remove o registro; o supervisor para o processo na próxima reconciliação
 
 ### Requirement: Supervisor Bun gerencia processos filhos por delta
-O sistema SHALL ter `src/application/supervisor/supervisor.ts` que ao iniciar lê todos os workers com `status IN ('idle', 'busy')` e os spawna como processos Bun filhos via `Bun.spawn()`. A cada 10 minutos reconcilia: spawna novos workers ativos, mata processos de workers removidos/inativos.
+O sistema SHALL ter `src/application/supervisor/supervisor.ts` que ao iniciar le todos os workers com `status IN ('idle', 'busy')` e os spawna como processos Bun filhos via `Bun.spawn()`. Cada processo filho SHALL executar um worker compartilhado apto a consumir multiplas filas (enrich, digest e forecast). A cada 10 minutos reconcilia: spawna novos workers ativos, mata processos de workers removidos/inativos.
 
 #### Scenario: Novo worker cadastrado
-- **WHEN** um worker está ativo e o supervisor executa o próximo reconcile
+- **WHEN** um worker esta ativo e o supervisor executa o proximo reconcile
 - **THEN** o supervisor spawna um processo filho com env vars do worker (`AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `WORKER_ID`, `DATABASE_URL`)
+- **THEN** o processo iniciado pode consumir jobs de enrich, digest e forecast
 
 #### Scenario: Worker desativado pelo admin
-- **WHEN** um worker sai do status `idle|busy` e o supervisor executa o próximo reconcile
+- **WHEN** um worker sai do status `idle|busy` e o supervisor executa o proximo reconcile
 - **THEN** o supervisor mata o processo filho correspondente
 
 ### Requirement: Auto-deactivação por crashes em série
@@ -240,3 +241,16 @@ O sistema SHALL detectar quando um processo filho sai com código não-zero, inc
 #### Scenario: Worker crasha 5 vezes
 - **WHEN** `error_count` atinge 5
 - **THEN** `workers.status = 'error'`; o worker não é mais reiniciado até o admin resetar para `idle`
+
+## ADDED Requirements
+
+### Requirement: Selecao de fila por rotacao no worker compartilhado
+O worker compartilhado SHALL aplicar politica de rotacao entre tipos de fila suportados para evitar starvation, com fallback para a proxima fila disponivel quando a fila corrente estiver vazia.
+
+#### Scenario: Rotacao com multiplas filas pendentes
+- **WHEN** existem jobs pendentes em duas ou mais filas
+- **THEN** o worker alterna o tipo de fila priorizado entre iteracoes consecutivas
+
+#### Scenario: Fallback quando fila priorizada esta vazia
+- **WHEN** a fila da vez na rotacao nao possui jobs pendentes
+- **THEN** o worker tenta claimar na proxima fila da rotacao sem encerrar o loop

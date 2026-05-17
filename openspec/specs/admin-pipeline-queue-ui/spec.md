@@ -4,16 +4,17 @@ Define admin queue cards and endpoints for digest, forecast, and ML enqueue oper
 ## Requirements
 
 ### Requirement: Admin panel exibe card de Digest Queue com stats e enqueue manual
-O super admin panel SHALL exibir uma secao "Digest Queue" com: stats em tempo real (pending, running, done, error), botao "Enqueue Digest" que chama `POST /api/admin/digest/enqueue`, e feedback de sucesso/erro. O enqueue insere jobs apenas para tenants com 100% de coverage no mes corrente.
+O super admin panel SHALL exibir uma secao "Digest Queue" com: stats em tempo real (pending, running, done, error), botao "Enqueue Digest" que chama `POST /api/admin/digest/enqueue`, e feedback de sucesso/erro. O enqueue insere jobs apenas para tenants com cobertura de enriquecimento maior ou igual a 80% no mes corrente.
 
 #### Scenario: Admin clica em Enqueue Digest com tenants prontos
-- **WHEN** o admin clica em "Enqueue Digest" e ha tenants com 100% de coverage
+- **WHEN** o admin clica em "Enqueue Digest" e ha tenants com cobertura >= 80%
 - **THEN** sao inseridos jobs em `digest_jobs` para esses tenants
 - **THEN** o card de stats atualiza mostrando os novos pending
 
 #### Scenario: Admin clica em Enqueue Digest sem tenants prontos
-- **WHEN** o admin clica em "Enqueue Digest" e nenhum tenant tem 100% de coverage
-- **THEN** nenhum job e inserido e o painel exibe mensagem informativa
+- **WHEN** o admin clica em "Enqueue Digest" e nenhum tenant tem cobertura >= 80%
+- **THEN** nenhum job e inserido
+- **THEN** o painel exibe mensagem informativa explicita de elegibilidade zero
 
 ### Requirement: Admin panel exibe card de Forecast Queue com stats e enqueue manual
 O super admin panel SHALL exibir uma secao "Forecast Queue" com: stats em tempo real (pending, running, done, error), botao "Enqueue Forecast" que chama `POST /api/admin/forecast/enqueue`, e feedback de sucesso/erro. O enqueue insere jobs para todos os tenants ativos com `job_date = hoje`.
@@ -33,12 +34,17 @@ O super admin panel SHALL exibir uma secao "ML Training" com: stats em tempo rea
 
 ### Requirement: Endpoints de admin para enqueue e stats de digest, forecast e ML
 O sistema SHALL ter os seguintes endpoints (todos requerem super admin auth):
-- `POST /api/admin/digest/enqueue` - enfileira digest para tenants com 100% coverage
+- `POST /api/admin/digest/enqueue` - enfileira digest para tenants com cobertura >= 80% no mes corrente
 - `GET /api/admin/digest/queue-stats` - retorna contagem por status em `digest_jobs`
 - `POST /api/admin/forecast/enqueue` - enfileira forecast para todos os tenants ativos (data=hoje)
 - `GET /api/admin/forecast/queue-stats` - retorna contagem por status em `forecast_jobs`
 - `POST /api/admin/ml/enqueue` - enfileira treino ML para todos os tenants ativos
 - `GET /api/admin/ml/queue-stats` - retorna contagem por status em `ml_training_jobs`
+
+#### Scenario: POST /api/admin/digest/enqueue retorna elegibilidade aplicada
+- **WHEN** `POST /api/admin/digest/enqueue` e chamado com token de super admin
+- **THEN** retorna payload com `enqueued`, `eligible`, `year` e `month`
+- **THEN** `eligible` considera apenas tenants com cobertura >= 80%
 
 #### Scenario: GET /api/admin/digest/queue-stats retorna contagens
 - **WHEN** `GET /api/admin/digest/queue-stats` e chamado com token de super admin
