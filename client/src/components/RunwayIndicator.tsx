@@ -1,5 +1,6 @@
 import { Typography } from "@mui/material";
 import type { Runway } from "../api/types.ts";
+import { MetricTooltip } from "./MetricTooltip.tsx";
 import { runwayDaysToTone, type SemanticTone } from "../utils/semanticTone.ts";
 
 function formatRunway(meses: number | null): string {
@@ -57,7 +58,10 @@ export function RunwayIndicator({ runway }: { runway: Runway | null }) {
   return (
     <div className="mt-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego imediato</Typography>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego imediato</Typography>
+          <MetricTooltip title="Por quantos dias seu saldo em conta corrente/poupança sustenta seus gastos médios dos últimos 3 meses." />
+        </div>
         <span
           data-testid="runway-imediato-badge"
           data-tone={imediatoTone}
@@ -76,7 +80,10 @@ export function RunwayIndicator({ runway }: { runway: Runway | null }) {
         </span>
       </div>
       <div className="flex items-center justify-between gap-3">
-        <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego total</Typography>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego total</Typography>
+          <MetricTooltip title="Por quantos dias seu saldo em conta corrente/poupança mais seus investimentos sustentam seus gastos médios dos últimos 3 meses." />
+        </div>
         <span
           data-testid="runway-total-badge"
           data-tone={totalTone}

@@ -9,6 +9,7 @@ import { DigestNarrative } from "../components/DigestNarrative.tsx";
 import { RunwayIndicator } from "../components/RunwayIndicator.tsx";
 import { formatBRL } from "../utils/format.ts";
 import { amountToTone } from "../utils/semanticTone.ts";
+import { MetricTooltip } from "../components/MetricTooltip.tsx";
 
 // Baseline de espaçamento interno (tasks 3.1–3.4):
 // - p dos Paper: var(--space-md)
@@ -67,12 +68,15 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
           bgcolor: "var(--color-surface-card)",
         }}
       >
-        <Typography
-          variant="caption"
-          sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
-        >
-          Resultado mensal
-        </Typography>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Typography
+            variant="caption"
+            sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
+          >
+            Resultado mensal
+          </Typography>
+          <MetricTooltip title="Receitas reais menos despesas reais do mês. Exclui transferências entre contas e aportes em investimentos." />
+        </div>
         <Typography
           data-testid="resumo-resultado"
           variant="h3"
@@ -105,17 +109,23 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-              Receitas
-            </Typography>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Receitas
+              </Typography>
+              <MetricTooltip title="Total de entradas de dinheiro no mês (salários, rendimentos, etc.). Transferências entre suas contas não são contadas." />
+            </div>
             <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-up)", fontFamily: "var(--font-family-numeric)" }}>
               {formatBRL(receitas)}
             </Typography>
           </div>
           <div>
-            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-              Despesas
-            </Typography>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Despesas
+              </Typography>
+              <MetricTooltip title="Total de saídas de dinheiro no mês (compras, contas, etc.). Transferências entre suas contas e aportes em investimentos não são contados." />
+            </div>
             <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-down)", fontFamily: "var(--font-family-numeric)" }}>
               {formatBRL(despesas)}
             </Typography>
