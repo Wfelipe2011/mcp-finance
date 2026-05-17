@@ -13,18 +13,33 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
   const rootDb = new BunPgAdapter(undefined, sql);
   const tenantIds = await rootDb.getActiveTenantsIds();
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  let bodyMonth: { year: number; month: number } | null = null;
+  try {
+    const body = await req.json();
+    if (typeof body?.month === "string" && /^\d{4}-\d{2}$/.test(body.month)) {
+      const [y, m] = body.month.split("-").map(Number);
+      bodyMonth = { year: y!, month: m! };
+    }
+  } catch {
+    // body ausente ou inválido — varredura completa
+  }
 
   const toEnqueue: { id: string; year: number; month: number }[] = [];
 
   for (const tenantId of tenantIds) {
     const db = new BunPgAdapter(tenantId, sql);
     try {
-      const coverage = await db.getDigestCoverage(year, month);
-      if (isDigestEligible(coverage.enriched, coverage.total)) {
-        toEnqueue.push({ id: tenantId, year, month });
+      if (bodyMonth) {
+        const { year, month } = bodyMonth;
+        const coverage = await db.getDigestCoverage(year, month);
+        if (isDigestEligible(coverage.enriched, coverage.total)) {
+          toEnqueue.push({ id: tenantId, year, month });
+        }
+      } else {
+        const eligible = await db.getEligibleMonthsForDigest();
+        for (const { year, month } of eligible) {
+          toEnqueue.push({ id: tenantId, year, month });
+        }
       }
     } catch {
       // skip tenant on error
@@ -33,12 +48,31 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
 
   const inserted = toEnqueue.length > 0 ? await rootDb.digest_jobs.enqueue(toEnqueue) : 0;
 
+  // Resetar jobs com status 'error' para 'pending' para que sejam reprocessados
+  let reset = 0;
+  if (toEnqueue.length > inserted) {
+    for (const t of toEnqueue) {
+      const rows = await sql`
+        UPDATE digest_jobs
+        SET status = 'pending', started_at = NULL, worker_id = NULL, finished_at = NULL
+        WHERE tenant_id = ${t.id}::uuid
+          AND year = ${t.year}
+          AND month = ${t.month}
+          AND status = 'error'
+        RETURNING id
+      `;
+      reset += rows.length;
+    }
+  }
+
+  const months = [...new Set(toEnqueue.map((t) => `${t.year}-${String(t.month).padStart(2, "0")}`))]
+    .sort();
+
   return jsonResponse({
-    enqueued: inserted,
+    enqueued: inserted + reset,
     eligible: toEnqueue.length,
     coverage_min: DIGEST_COVERAGE_MIN,
-    year,
-    month,
+    months,
   });
 }
 

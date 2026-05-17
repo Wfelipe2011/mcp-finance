@@ -1853,6 +1853,37 @@ export class BunPgAdapter {
     });
   }
 
+  async getEligibleMonthsForDigest(): Promise<{ year: number; month: number }[]> {
+    const tenantId = this.tenantId;
+    if (!tenantId) throw new Error("getEligibleMonthsForDigest requires a tenant context");
+    return this.withTenant(async (q) => {
+      const rows = await q<{ year: number; month: number }[]>`
+        SELECT coverage.year, coverage.month
+        FROM (
+          SELECT
+            EXTRACT(YEAR  FROM t.date_day)::int AS year,
+            EXTRACT(MONTH FROM t.date_day)::int AS month,
+            COUNT(ai.transaction_id) AS enriched,
+            COUNT(*) AS total
+          FROM f_transacoes t
+          LEFT JOIN ai_transaction_insights ai ON ai.transaction_id = t.transaction_id
+          GROUP BY 1, 2
+        ) coverage
+        WHERE coverage.total > 0
+          AND coverage.enriched::float / coverage.total >= 0.8
+          AND NOT EXISTS (
+            SELECT 1 FROM digest_jobs dj
+            WHERE dj.tenant_id = ${tenantId}::uuid
+              AND dj.year  = coverage.year
+              AND dj.month = coverage.month
+              AND dj.status IN ('done', 'pending', 'running')
+          )
+        ORDER BY coverage.year, coverage.month
+      `;
+      return rows.map((r) => ({ year: Number(r.year), month: Number(r.month) }));
+    });
+  }
+
   async getDigestData(year: number, month: number) {
     return this.withTenant(async (q) => {
       const rows = await q<
