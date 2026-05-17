@@ -47,14 +47,14 @@ export function MetricTooltip({ title }: MetricTooltipProps) {
             transform: "translateX(-50%)",
             zIndex: 1000,
             maxWidth: 280,
-            backgroundColor: "var(--color-surface-elevated)",
-            color: "var(--color-text-body)",
-            border: "1px solid var(--color-border-hairline)",
+            backgroundColor: "var(--color-text-primary)",
+            color: "var(--color-surface-card)",
+            border: "none",
             borderRadius: "var(--radius-md)",
             padding: "var(--space-sm) var(--space-md)",
             fontSize: "0.75rem",
             lineHeight: 1.5,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
             whiteSpace: "normal",
           }}
         >
