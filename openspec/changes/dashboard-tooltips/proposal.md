@@ -22,5 +22,6 @@ Os números do dashboard (Resultado do Mês, Receitas, Despesas, Fôlego Imediat
 
 - `client/src/tabs/Resumo.tsx` — adiciona ícone "?" com tooltip em cada label
 - `client/src/components/RunwayIndicator.tsx` — adiciona tooltip ao lado do indicador de fôlego
+- `client/src/shims/mui/icons/HelpOutlineRounded.tsx` — novo ícone no shim, seguindo o padrão `_base.tsx`
 - Nenhuma mudança em API, banco, ou lógica de negócio
-- Dependência nova: componente de Tooltip do MUI (já disponível via `@mui/material`)
+- Nenhuma dependência nova — tooltip implementado com CSS vars do design system e `useState`

@@ -1,6 +1,7 @@
 ## 1. Componente auxiliar de tooltip
 
-- [ ] 1.1 Criar componente `MetricTooltip` em `client/src/components/MetricTooltip.tsx` — recebe `title: string` e renderiza ícone `HelpOutline` (16px, cor `text.disabled`) envolvido em `<Tooltip title={title}>`
+- [ ] 1.1 Criar ícone `HelpOutlineRounded.tsx` em `client/src/shims/mui/icons/` seguindo o padrão de `_base.tsx` — SVG inline do ícone `help_outline`, props `{ fontSize?, style? }`
+- [ ] 1.2 Criar componente `MetricTooltip` em `client/src/components/MetricTooltip.tsx` — recebe `title: string`; renderiza o ícone `HelpOutlineRounded` (16px, cor `var(--color-muted)`) como botão; ao clicar, abre popover posicionado com `position: absolute` usando CSS vars do design system; fecha ao clicar fora via `useEffect` + `mousedown` no `document`
 
 ## 2. Tooltips no card Resumo
 
