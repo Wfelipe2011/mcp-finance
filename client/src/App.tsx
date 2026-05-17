@@ -25,6 +25,7 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import { MonthPicker } from "./components/MonthPicker.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { ConfigDialog } from "./components/ConfigDialog.tsx";
+import { ChatWidget } from "./components/ChatWidget.tsx";
 import { Resumo } from "./tabs/Resumo.tsx";
 import { Gastos } from "./tabs/Gastos.tsx";
 import { ProximoMes } from "./tabs/ProximoMes.tsx";
@@ -273,6 +274,7 @@ export function App() {
       </Snackbar>
 
       <ConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} />
+      <ChatWidget />
     </ThemeProvider>
   );
 }

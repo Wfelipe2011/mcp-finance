@@ -15,6 +15,7 @@ export class LoginAutomationService {
     const browser = new BrowserAutomation();
     const gmail = new GmailReader(email, appPassword);
     const startedAt = new Date();
+    startedAt.setHours(startedAt.getHours() - 3);
 
     try {
       await browser.startLogin(email);

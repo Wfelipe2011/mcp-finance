@@ -14,6 +14,8 @@ import type {
   ForecastGroupsResponse,
   ForecastCategoriesResponse,
   ForecastMessage,
+  ChatRequest,
+  ChatResponse,
 } from "./types.ts";
 
 const BASE = "";
@@ -130,6 +132,22 @@ export async function triggerSync(): Promise<SyncSummary> {
 
 export function fetchUsers(): Promise<User[]> {
   return get<User[]>("/api/users");
+}
+
+export async function postChatMessage(payload: ChatRequest): Promise<ChatResponse> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (res.status === 401) {
+    return handleUnauthorized();
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<ChatResponse>;
 }
 
 export async function updateUserDisplayName(id: number, displayName: string): Promise<User> {

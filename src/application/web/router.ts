@@ -21,6 +21,7 @@ import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
 import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
+import { handleChat } from "./routes/chat.ts";
 
 export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
   const path = url.pathname;
@@ -62,6 +63,7 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/groups" && req.method === "GET") return handleForecastGroups(req, tenantId, sql);
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
+  if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId);
 
   return errorResponse("Not found", 404);
 }

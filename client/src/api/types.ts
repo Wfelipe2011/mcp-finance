@@ -201,3 +201,17 @@ export interface ForecastMessage {
   message_pt?: string;
   message_date?: string;
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  history?: ChatMessage[];
+}
+
+export interface ChatResponse {
+  reply: string;
+}
