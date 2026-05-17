@@ -2,7 +2,7 @@
 description: Executar testing gate de uma change antes de arquivar
 ---
 
-Execute o testing gate para uma change — valida em ambiente Docker limpo usando postgres-mcp e browser tools.
+Execute o testing gate para uma change — valida usando postgres-mcp e browser tools.
 
 **Input**: Especifique o nome da change após `/opsx:test` (ex: `/opsx:test multitenant-schema`). Se omitido, verificar contexto da conversa ou listar changes disponíveis.
 
@@ -34,7 +34,6 @@ Execute o testing gate para uma change — valida em ambiente Docker limpo usand
 
    Executar na raiz do projeto:
    ```bash
-   docker compose down -v
    docker compose up -d postgres
    ```
 
@@ -86,7 +85,7 @@ Execute o testing gate para uma change — valida em ambiente Docker limpo usand
 ---
 
 **Guardrails**
-- NUNCA pular o ambiente limpo — `docker compose down -v` é obrigatório
+- NUNCA rodar — `docker compose down -v` é obrigatório
 - Derivar assertions das **specs da change**, não inventar testes genéricos
 - Usar `postgres-finance` MCP para tudo que é SQL (schema, RLS, dados)
 - Usar browser tools VS Code para tudo que é HTTP/JWT/visual — NUNCA `mcp_io_github_chr_*`

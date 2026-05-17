@@ -3,7 +3,13 @@ import { PieChart } from "@mui/x-charts/PieChart";
 import type { PatrimonioItem } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
-const COLORS = ["#1976d2", "#388e3c", "#f57c00", "#7b1fa2", "#c62828"];
+const COLORS = [
+  "var(--color-surface-elevated)",
+  "var(--color-accent-turquoise)",
+  "var(--color-primary)",
+  "var(--color-trading-up)",
+  "var(--color-info)",
+];
 
 export function PatrimonioDonut({ contas }: { contas: PatrimonioItem[] }) {
   const grouped = new Map<string, number>();

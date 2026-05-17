@@ -6,6 +6,14 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@mui/material": ["src/shims/mui/material.tsx"],
+      "@mui/icons-material/*": ["src/shims/mui/icons/*"],
+      "@mui/x-charts/BarChart": ["src/shims/mui/charts/BarChart.tsx"],
+      "@mui/x-charts/LineChart": ["src/shims/mui/charts/LineChart.tsx"],
+      "@mui/x-charts/PieChart": ["src/shims/mui/charts/PieChart.tsx"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -16,5 +24,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

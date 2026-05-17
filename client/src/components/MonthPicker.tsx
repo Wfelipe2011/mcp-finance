@@ -26,9 +26,20 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
         value={value}
         onChange={(e: SelectChangeEvent) => onChange(e.target.value)}
         displayEmpty
+        sx={{
+          bgcolor: "var(--color-surface-strong)",
+          borderRadius: "var(--radius-lg)",
+          color: "var(--color-text-primary)",
+        }}
       >
         {meses.map((m) => (
-          <MenuItem key={m} value={m}>
+          <MenuItem
+            key={m}
+            value={m}
+            sx={{
+              color: "var(--color-text-primary)",
+            }}
+          >
             {m}
           </MenuItem>
         ))}

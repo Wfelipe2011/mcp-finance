@@ -4,7 +4,14 @@ import type { GastoGrupo } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
 const MAX_GROUPS = 5;
-const COLORS = ["#1976d2", "#388e3c", "#f57c00", "#7b1fa2", "#c62828", "#0288d1"];
+const COLORS = [
+  "var(--color-primary)",
+  "var(--color-accent-turquoise)",
+  "var(--color-trading-up)",
+  "var(--color-info)",
+  "var(--color-trading-down)",
+  "var(--color-primary-active)",
+];
 
 export function GruposDonut({ grupos }: { grupos: GastoGrupo[] }) {
   if (grupos.length === 0) return null;

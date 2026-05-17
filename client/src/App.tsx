@@ -8,7 +8,6 @@ import {
   Typography,
   ThemeProvider,
   CssBaseline,
-  createTheme,
   CircularProgress,
   Snackbar,
   Alert,
@@ -34,6 +33,7 @@ import { Investimentos } from "./tabs/Investimentos.tsx";
 import { Insights } from "./tabs/Insights.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
+import { createAppTheme, type AppColorMode } from "./theme.ts";
 
 function isTokenValid(token: string): boolean {
   try {
@@ -45,7 +45,11 @@ function isTokenValid(token: string): boolean {
   } catch {
     return false;
   }
+
 }
+
+// Altura total da tabbar fixa (Paper bottom + BottomNavigation minHeight) + margem
+const TABBAR_HEIGHT = 68;
 
 export function App() {
   const [authToken, setAuthToken] = useState<string | null>(
@@ -63,8 +67,8 @@ export function App() {
     setSelectedMonth(month);
   };
   const [activeTab, setActiveTab] = useState(0);
-  const [colorMode, setColorMode] = useState<"light" | "dark">(
-    (localStorage.getItem("colorMode") as "light" | "dark") ?? "light"
+  const [colorMode, setColorMode] = useState<AppColorMode>(
+    (localStorage.getItem("colorMode") as AppColorMode) ?? "light"
   );
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
@@ -77,7 +81,12 @@ export function App() {
     localStorage.setItem("colorMode", nextMode);
   };
 
-  const theme = useMemo(() => createTheme({ palette: { mode: colorMode } }), [colorMode]);
+  const theme = useMemo(() => createAppTheme(colorMode), [colorMode]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("light", colorMode === "light");
+  }, [colorMode]);
 
   useEffect(() => {
     if (!selectedMonth) return;
@@ -147,11 +156,40 @@ export function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ maxWidth: 448, mx: "auto", minHeight: "100vh", bgcolor: "background.default", px: 2, pb: "56px" }}>
-        <Box component="header" sx={{ py: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 560,
+          marginLeft: "auto",
+          marginRight: "auto",
+          minHeight: "100vh",
+          boxSizing: "border-box",
+          backgroundColor: "var(--color-canvas)",
+          paddingLeft: "var(--space-sm)",
+          paddingRight: "var(--space-sm)",
+          paddingBottom: `calc(${TABBAR_HEIGHT}px + 8px + env(safe-area-inset-bottom, 0px))`,
+        }}
+      >
+        <Box
+          component="header"
+          sx={{
+            py: "var(--space-md)",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "var(--space-sm)",
+          }}
+        >
           <div>
-            <Typography variant="h6" fontWeight="bold">💰 Finanças Familiar</Typography>
-            <div className="mt-2">
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              sx={{ color: "var(--color-text-primary)", lineHeight: 1.2 }}
+            >
+              💰 Finanças Familiar
+            </Typography>
+            <div className="mt-3">
               <MonthPicker value={selectedMonth} onChange={handleMonthChange} />
             </div>
           </div>
@@ -179,13 +217,33 @@ export function App() {
           </Box>
         </Box>
 
-        <main>{tabs[activeTab]}</main>
+        <main style={{ overflowX: "hidden", minWidth: 0 }}>{tabs[activeTab]}</main>
 
-        <Paper sx={{ position: "fixed", bottom: 0, left: 0, right: 0 }} elevation={3}>
+        <Paper
+          sx={{
+            position: "fixed",
+            bottom: "var(--space-sm)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "calc(100% - (var(--space-md) * 2))",
+            maxWidth: "calc(560px - (var(--space-md) * 2))",
+            borderRadius: "var(--radius-xl)",
+            border: "1px solid var(--color-border-hairline)",
+            backgroundColor: "var(--color-surface-card)",
+            overflow: "hidden",
+            paddingBottom: "env(safe-area-inset-bottom, 8px)",
+          }}
+          elevation={0}
+        >
           <BottomNavigation
+            aria-label="Navegação principal"
             value={activeTab}
             onChange={(_e, v: number) => setActiveTab(v)}
             showLabels
+            sx={{
+              bgcolor: "transparent",
+              minHeight: 60,
+            }}
           >
             <BottomNavigationAction label="Resumo" icon={<HomeRoundedIcon />} />
             <BottomNavigationAction label="Gastos" icon={<ReceiptLongRoundedIcon />} />
@@ -202,6 +260,7 @@ export function App() {
         autoHideDuration={syncState === "error" ? 6000 : 4000}
         onClose={() => setSnackOpen(false)}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        sx={{ bottom: `calc(${TABBAR_HEIGHT}px + var(--space-sm))` }}
       >
         <Alert
           onClose={() => setSnackOpen(false)}

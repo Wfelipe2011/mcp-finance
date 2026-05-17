@@ -12,9 +12,16 @@ export function AnomaliasList({ transacoes }: { transacoes: Transacao[] }) {
   }
 
   return (
-    <ul className="mt-2 space-y-3">
+    <ul className="mt-3 space-y-3">
       {transacoes.map((t) => (
-        <li key={t.transaction_id} className="space-y-1">
+        <li
+          key={t.transaction_id}
+          className="space-y-2 rounded-[var(--radius-lg)] border px-[var(--space-sm)] py-[var(--space-sm)]"
+          style={{
+            borderColor: "color-mix(in srgb, var(--color-trading-down) 35%, var(--color-border-hairline))",
+            backgroundColor: "color-mix(in srgb, var(--color-trading-down) 10%, var(--color-surface-card))",
+          }}
+        >
           <div className="flex justify-between items-baseline">
             <Typography variant="body2" noWrap sx={{ maxWidth: "65%" }}>
               {t.merchant_name ?? t.description}
@@ -25,7 +32,11 @@ export function AnomaliasList({ transacoes }: { transacoes: Transacao[] }) {
             variant="determinate"
             value={Math.round((t.anomaly_score ?? 0) * 100)}
             color="error"
-            sx={{ borderRadius: 1, height: 6 }}
+            sx={{
+              borderRadius: "var(--radius-pill)",
+              height: 8,
+              bgcolor: "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
+            }}
           />
           <Typography variant="caption" color="text.secondary">
             score: {t.anomaly_score?.toFixed(2)} · {t.category_pt ?? "sem categoria"} · {t.date_day.slice(0, 10)}

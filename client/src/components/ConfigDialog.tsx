@@ -49,20 +49,40 @@ export function ConfigDialog({ open, onClose }: Props) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      PaperProps={{
+        sx: {
+          bgcolor: "var(--color-surface-card)",
+          border: "1px solid var(--color-border-hairline)",
+          borderRadius: "var(--radius-xl)",
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          color: "var(--color-text-primary)",
+          fontWeight: 700,
+        }}
+      >
         ⚙️ Configurações
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={onClose} size="small" aria-label="Fechar configurações">
           <CloseRoundedIcon />
         </IconButton>
       </DialogTitle>
       <DialogContent>
-        <Typography variant="subtitle2" color="text.secondary" mb={2}>
+        <Typography variant="subtitle2" sx={{ color: "var(--color-text-body)", mb: "var(--space-sm)" }}>
           Membros
         </Typography>
         {users.map((user) => (
-          <Box key={user.id} sx={{ mb: 2 }}>
-            <Typography variant="caption" color="text.secondary">
+          <Box key={user.id} sx={{ mb: "var(--space-sm)" }}>
+            <Typography variant="caption" sx={{ color: "var(--color-text-body)" }}>
               {user.name}
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 0.5 }}>

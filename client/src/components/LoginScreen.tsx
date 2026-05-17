@@ -49,8 +49,8 @@ export function LoginScreen({ onLogin }: Props) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        px: 3,
-        bgcolor: "background.default",
+        px: "var(--space-md)",
+        bgcolor: "var(--color-canvas)",
       }}
     >
       <Box
@@ -58,13 +58,23 @@ export function LoginScreen({ onLogin }: Props) {
         onSubmit={handleSubmit}
         sx={{
           width: "100%",
-          maxWidth: 360,
+          maxWidth: 380,
           display: "flex",
           flexDirection: "column",
-          gap: 2,
+          gap: "var(--space-sm)",
+          p: "var(--space-lg)",
+          borderRadius: "var(--radius-xl)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
         }}
       >
-        <Typography variant="h5" fontWeight="bold" textAlign="center" mb={1}>
+        <Typography
+          variant="h5"
+          fontWeight={700}
+          textAlign="center"
+          mb={1}
+          sx={{ color: "var(--color-text-primary)" }}
+        >
           💰 Finanças
         </Typography>
 
@@ -93,6 +103,11 @@ export function LoginScreen({ onLogin }: Props) {
           size="large"
           disabled={loading}
           fullWidth
+          sx={{
+            bgcolor: "var(--color-primary)",
+            color: "var(--color-on-primary)",
+            borderRadius: "var(--radius-md)",
+          }}
         >
           {loading ? <CircularProgress size={24} color="inherit" /> : "Entrar"}
         </Button>

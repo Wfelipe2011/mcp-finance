@@ -5,10 +5,30 @@ import { formatBRL } from "../utils/format.ts";
 export function NotableExpenses({ expenses }: { expenses: NotableExpense[] | null | undefined }) {
   if (!expenses || expenses.length === 0) return null;
 
+  const highestAmount = Math.max(...expenses.map((item) => Math.abs(item.amount)), 1);
+
   return (
-    <ul className="mt-2 space-y-2">
+    <ul className="mt-3 space-y-2">
       {expenses.map((e, i) => (
-        <li key={i} className="border-l-2 border-amber-400 pl-3">
+        <li
+          key={i}
+          className="rounded-[var(--radius-lg)] border pl-3 pr-[var(--space-sm)] py-[var(--space-xs)]"
+          style={{
+            borderColor: "color-mix(in srgb, var(--color-primary) 45%, var(--color-border-hairline))",
+            backgroundColor: "color-mix(in srgb, var(--color-primary) 9%, var(--color-surface-card))",
+          }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: `${Math.max(12, Math.round((Math.abs(e.amount) / highestAmount) * 100))}%`,
+              maxWidth: "100%",
+              height: "3px",
+              marginBottom: "var(--space-xs)",
+              borderRadius: "var(--radius-pill)",
+              backgroundColor: "var(--color-primary)",
+            }}
+          />
           <div className="flex justify-between items-baseline">
             <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: "70%" }}>{e.description}</Typography>
             <Typography variant="body2" fontWeight={600}>{formatBRL(e.amount)}</Typography>

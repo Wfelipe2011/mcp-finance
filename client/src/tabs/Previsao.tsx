@@ -1,16 +1,30 @@
 import { useState, useEffect } from "react";
-import { Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, useMediaQuery } from "@mui/material";
+import { Box, Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, useMediaQuery } from "@mui/material";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { fetchForecastMessage, fetchForecastGroups, fetchForecastCategories } from "../api/client.ts";
-import type { ForecastMessage, ForecastGroupsResponse, ForecastCategoriesResponse } from "../api/types.ts";
+import type { CashflowProjetado, ForecastMessage, ForecastGroupsResponse, ForecastCategoriesResponse } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
+import { CashflowAreaChart } from "../components/CashflowAreaChart.tsx";
 import { formatBRL } from "../utils/format.ts";
+import { amountToTone } from "../utils/semanticTone.ts";
+
+// Baseline de espaçamento interno (tasks 3.1–3.4):
+// - p dos Paper: var(--space-md)
+// - gap caption → valor (h3): mt: "var(--space-xs)"
+// - gap valor → body2: mt: "var(--space-xs)"
+// - gap caption → componente filho: mb: "var(--space-xs)" na caption ou <Box sx={{ mt: "var(--space-xs)" }}>
+// - gap entre cards em stack: space-y-4 (Tailwind) — manter
 
 function monthLabel(year: number, month: number): string {
   const date = new Date(year, month - 1, 1);
   return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+}
+
+function formatBRLShort(v: number): string {
+  if (Math.abs(v) >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
+  return `R$${v.toFixed(0)}`;
 }
 
 function ForecastBarChart({ groupsData }: { groupsData: ForecastGroupsResponse }) {
@@ -18,11 +32,10 @@ function ForecastBarChart({ groupsData }: { groupsData: ForecastGroupsResponse }
   const { months, has_forecast } = groupsData;
 
   const allMonths = Array.from(
-    new Map(months.map((m) => [`${m.year}-${m.month}`, { year: m.year, month: m.month, type: m.type }])).values()
+    new Map(months.map((m) => [`${m.year}-${m.month}`, { year: m.year, month: m.month, type: m.type }])).values(),
   ).sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
 
   const groups = Array.from(new Set(months.map((m) => m.group_pt)));
-
   const xLabels = allMonths.map((m) => monthLabel(m.year, m.month));
 
   const series = groups.map((group) => ({
@@ -37,11 +50,16 @@ function ForecastBarChart({ groupsData }: { groupsData: ForecastGroupsResponse }
     <>
       <BarChart
         xAxis={[{ scaleType: "band", data: xLabels }]}
-        yAxis={[{ valueFormatter: (v: number) => formatBRL(v) }]}
+        yAxis={[{ valueFormatter: formatBRLShort }]}
         series={series.map((s, i) => ({
           ...s,
           valueFormatter: (v: number | null) => (v !== null ? formatBRL(v) : ""),
-          color: ["#1976d2", "#f59e0b", "#22c55e"][i % 3],
+          color: [
+            "var(--color-primary)",
+            "var(--color-accent-turquoise)",
+            "var(--color-trading-up)",
+            "var(--color-info)",
+          ][i % 4],
         }))}
         height={220}
         margin={{ left: isMobile ? 52 : 70 }}
@@ -82,31 +100,65 @@ function ForecastTable({ categoriesData }: { categoriesData: ForecastCategoriesR
   if (categories.length === 0) return null;
 
   return (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>Categoria</TableCell>
-          <TableCell>Grupo</TableCell>
-          <TableCell align="right">Real (mês atual)</TableCell>
-          <TableCell align="right">Previsto (próx. mês)</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {categories.map(({ group_pt, category_pt }) => {
-          const real = realMonths.find((m) => m.group_pt === group_pt && m.category_pt === category_pt);
-          const forecast = forecastMonths.find((m) => m.group_pt === group_pt && m.category_pt === category_pt);
-          return (
-            <TableRow key={`${group_pt}|${category_pt}`}>
-              <TableCell>{category_pt || "—"}</TableCell>
-              <TableCell>{group_pt}</TableCell>
-              <TableCell align="right">{real ? formatBRL(real.amount) : "—"}</TableCell>
-              <TableCell align="right">{forecast ? formatBRL(forecast.amount) : "—"}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <Box sx={{ overflowX: "auto" }}>
+      <Table size="small" sx={{ minWidth: 320 }}>
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.6, fontSize: "0.68rem" }}>Categoria</TableCell>
+            <TableCell sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.6, fontSize: "0.68rem" }}>Grupo</TableCell>
+            <TableCell align="right" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.6, fontSize: "0.68rem" }}>Real (mês atual)</TableCell>
+            <TableCell align="right" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.6, fontSize: "0.68rem" }}>Previsto (próx. mês)</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {categories.map(({ group_pt, category_pt }) => {
+            const real = realMonths.find((m) => m.group_pt === group_pt && m.category_pt === category_pt);
+            const forecast = forecastMonths.find((m) => m.group_pt === group_pt && m.category_pt === category_pt);
+            return (
+              <TableRow key={`${group_pt}|${category_pt}`}>
+                <TableCell sx={{ fontSize: "0.75rem", py: "var(--space-xxs)" }}>{category_pt || "—"}</TableCell>
+                <TableCell sx={{ fontSize: "0.75rem", py: "var(--space-xxs)" }}>{group_pt}</TableCell>
+                <TableCell align="right" sx={{ fontSize: "0.75rem", py: "var(--space-xxs)" }}>{real ? formatBRL(real.amount) : "—"}</TableCell>
+                <TableCell align="right" sx={{ fontSize: "0.75rem", py: "var(--space-xxs)" }}>{forecast ? formatBRL(forecast.amount) : "—"}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Box>
   );
+}
+
+function buildForecastCashflow(months: ForecastGroupsResponse["months"]): CashflowProjetado[] {
+  const grouped = new Map<string, { year: number; month: number; month_name_pt: string; is_projected: boolean; saldo: number }>();
+
+  for (const row of months) {
+    const key = `${row.year}-${row.month}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        year: row.year,
+        month: row.month,
+        month_name_pt: monthLabel(row.year, row.month),
+        is_projected: row.type === "forecast",
+        saldo: 0,
+      });
+    }
+    const current = grouped.get(key)!;
+    current.saldo += row.amount;
+    current.is_projected = row.type === "forecast";
+  }
+
+  return Array.from(grouped.values())
+    .sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month))
+    .map((entry) => ({
+      year: entry.year,
+      month: entry.month,
+      month_name_pt: entry.month_name_pt,
+      total_receitas: null,
+      total_despesas: null,
+      saldo_liquido: entry.saldo,
+      is_projected: entry.is_projected,
+    }));
 }
 
 export function Previsao() {
@@ -142,12 +194,85 @@ export function Previsao() {
   const messageDate = message?.message_date
     ? new Date(message.message_date).toLocaleDateString("pt-BR")
     : null;
+  const forecastMonths = groupsData?.months.filter((m) => m.type === "forecast") ?? [];
+  const firstForecast = forecastMonths
+    .slice()
+    .sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month))[0];
+  const projectedCashflow = firstForecast
+    ? forecastMonths
+      .filter((m) => m.year === firstForecast.year && m.month === firstForecast.month)
+      .reduce((sum, m) => sum + m.amount, 0)
+    : 0;
+  const projectedTone = amountToTone(projectedCashflow);
+  const projectedColor = projectedTone === "negative" ? "var(--color-trading-down)" : "var(--color-trading-up)";
+  const cashflowSeries = buildForecastCashflow(groupsData?.months ?? []);
 
   return (
-    <div className="mt-4 space-y-3">
-      {/* Seção 1: Card de mensagem AI */}
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+    <div className="mt-4 space-y-4">
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}>
+          Cashflow projetado
+        </Typography>
+        <Typography
+          data-testid="previsao-kpi-cashflow"
+          data-tone={projectedTone}
+          variant="h3"
+          style={{ color: projectedColor }}
+          sx={{
+            fontWeight: 700,
+            mt: "var(--space-xs)",
+            fontFamily: "var(--font-family-numeric)",
+            lineHeight: 1.1,
+          }}
+        >
+          {formatBRL(projectedCashflow)}
+        </Typography>
+        <Typography variant="body2" sx={{ color: "var(--color-muted)", mt: "var(--space-xs)" }}>
+          Soma prevista do próximo mês disponível no forecast.
+        </Typography>
+      </Paper>
+
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+          Evolução do cashflow
+        </Typography>
+        <Box sx={{ mt: "var(--space-xs)" }}>
+          {cashflowSeries.length > 0 ? (
+            <CashflowAreaChart data={cashflowSeries} />
+          ) : (
+            <Typography variant="body2" color="text.disabled" fontStyle="italic">
+              Previsões ainda sendo preparadas. Volte amanhã.
+            </Typography>
+          )}
+        </Box>
+      </Paper>
+
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8, display: "flex", alignItems: "center", gap: 0.5, mb: "var(--space-xs)" }}>
           <TrendingUpRoundedIcon fontSize="small" />
           Previsão de IA
         </Typography>
@@ -169,9 +294,16 @@ export function Previsao() {
         )}
       </Paper>
 
-      {/* Seção 2: Gráfico de grupos */}
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8, mb: "var(--space-xs)", display: "block" }}>
           Gastos por grupo — real + previsto
         </Typography>
         {groupsData && groupsData.months.length > 0 ? (
@@ -183,9 +315,16 @@ export function Previsao() {
         )}
       </Paper>
 
-      {/* Seção 3: Tabela de categorias */}
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8, mb: "var(--space-xs)", display: "block" }}>
           Categorias — real vs. previsto
         </Typography>
         {categoriesData && categoriesData.months.length > 0 ? (

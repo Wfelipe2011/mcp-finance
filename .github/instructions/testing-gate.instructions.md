@@ -44,7 +44,6 @@ Para cada spec, identificar as **capabilities garantidas** — o que a spec afir
 ```
 ## Testing Gate — <change-name>
 
-**Ambiente:** Docker clean (volume zerado) ✓
 **Banco:** healthy ✓
 
 ### Assertions

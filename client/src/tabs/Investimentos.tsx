@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Paper, Typography } from "@mui/material";
+import { Box, Paper, Typography } from "@mui/material";
 import { fetchPatrimonio, fetchInvestimentos } from "../api/client.ts";
 import type { Patrimonio, InvestimentoMensal } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -7,6 +7,13 @@ import { ErrorCard } from "../components/ErrorCard.tsx";
 import { PatrimonioDonut } from "../components/PatrimonioDonut.tsx";
 import { InvestimentosBarChart } from "../components/InvestimentosBarChart.tsx";
 import { formatBRL } from "../utils/format.ts";
+
+// Baseline de espaçamento interno (tasks 3.1–3.4):
+// - p dos Paper: var(--space-md)
+// - gap caption → valor (h1): mt: "var(--space-xs)"
+// - gap valor → body2: mt: "var(--space-xs)"
+// - gap caption → componente filho: <Box sx={{ mt: "var(--space-xs)" }}>
+// - gap entre cards em stack: space-y-4 (Tailwind) — manter
 
 export function Investimentos({ month: _month }: { month: string }) {
   const [patrimonio, setPatrimonio] = useState<Patrimonio | null>(null);
@@ -33,24 +40,60 @@ export function Investimentos({ month: _month }: { month: string }) {
   if (error) return <ErrorCard message={error} />;
 
   return (
-    <div className="mt-4 space-y-3">
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+    <div className="mt-4 space-y-4">
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
+        >
           Patrimônio Total
         </Typography>
-        <Typography variant="h4" color="primary.main" fontWeight={700}>
+        <Typography
+          data-testid="investimentos-patrimonio-total"
+          variant="h1"
+          sx={{
+            fontWeight: 700,
+            mt: "var(--space-xs)",
+            color: "var(--color-text-primary)",
+            fontFamily: "var(--font-family-numeric)",
+            lineHeight: 1.1,
+          }}
+        >
           {formatBRL(patrimonio?.total_patrimonio ?? 0)}
+        </Typography>
+        <Typography variant="body2" sx={{ color: "var(--color-muted)", mt: "var(--space-xxs)", mb: "var(--space-sm)" }}>
+          Distribuição consolidada por tipo de conta.
         </Typography>
         {patrimonio && <PatrimonioDonut contas={patrimonio.items} />}
       </Paper>
 
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="body2" fontWeight={600} color="text.primary">
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}
+        >
           Movimentações (últimos 6 meses)
         </Typography>
-        <InvestimentosBarChart data={investimentos} />
+        <Box sx={{ mt: "var(--space-xs)" }}>
+          <InvestimentosBarChart data={investimentos} />
+        </Box>
       </Paper>
     </div>
   );
 }
-

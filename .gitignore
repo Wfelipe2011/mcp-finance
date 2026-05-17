@@ -46,3 +46,5 @@ finance.db-wal
 # Auth service runtime data
 auth/data/
 auth/screenshots/
+
+.compozy

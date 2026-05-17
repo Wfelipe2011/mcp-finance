@@ -3,6 +3,11 @@ import { BarChart } from "@mui/x-charts/BarChart";
 import type { InvestimentoMensal } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
+function formatBRLShort(v: number): string {
+  if (Math.abs(v) >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
+  return `R$${v.toFixed(0)}`;
+}
+
 interface MonthData {
   mes: string;
   aplicacoes: number;
@@ -31,18 +36,18 @@ export function InvestimentosBarChart({ data }: { data: InvestimentoMensal[] }) 
   return (
     <BarChart
       xAxis={[{ scaleType: "band", data: labels }]}
-      yAxis={[{ valueFormatter: (v: number) => formatBRL(v) }]}
+      yAxis={[{ valueFormatter: formatBRLShort }]}
       series={[
         {
           data: rows.map((r) => r.aplicacoes),
           label: "Aplicações",
-          color: "#1976d2",
+          color: "var(--color-trading-up)",
           valueFormatter: (v: number | null) => (v !== null ? formatBRL(v) : ""),
         },
         {
           data: rows.map((r) => r.resgates),
           label: "Resgates",
-          color: "#f59e0b",
+          color: "var(--color-trading-down)",
           valueFormatter: (v: number | null) => (v !== null ? formatBRL(v) : ""),
         },
       ]}

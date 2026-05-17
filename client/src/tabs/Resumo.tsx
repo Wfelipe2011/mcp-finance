@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Box, Chip, Paper, Typography } from "@mui/material";
+import { Box, Paper, Typography } from "@mui/material";
 import { fetchCashflow, fetchPatrimonio, fetchRunway } from "../api/client.ts";
 import type { CashflowMensal, Digest, Patrimonio, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -8,6 +8,14 @@ import { FlagPills } from "../components/FlagPills.tsx";
 import { DigestNarrative } from "../components/DigestNarrative.tsx";
 import { RunwayIndicator } from "../components/RunwayIndicator.tsx";
 import { formatBRL } from "../utils/format.ts";
+import { amountToTone } from "../utils/semanticTone.ts";
+
+// Baseline de espaçamento interno (tasks 3.1–3.4):
+// - p dos Paper: var(--space-md)
+// - gap caption → valor (h3/h6): mt: "var(--space-xs)"
+// - gap valor → body2: mt: "var(--space-xs)"
+// - gap caption → componente filho: <Box sx={{ mt: "var(--space-xs)" }}>
+// - gap entre cards em stack: space-y-4 (Tailwind) — manter
 
 export function Resumo({ month, digest }: { month: string; digest: Digest | null }) {
   const [cashflow, setCashflow] = useState<CashflowMensal | null>(null);
@@ -41,74 +49,144 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
   if (!cashflow) return <ErrorCard message="Dados não disponíveis para este mês." />;
 
   const cashflowReal = digest?.cashflow_real ?? cashflow.saldo_liquido;
-  const isPositive = cashflowReal >= 0;
+  const cashflowTone = amountToTone(cashflowReal);
+  const cashflowColor = cashflowTone === "negative" ? "var(--color-trading-down)" : "var(--color-trading-up)";
+  const receitas = cashflow.total_receitas_operacionais ?? cashflow.total_receitas;
+  const despesas = cashflow.total_despesas;
+  const contasBanco = patrimonio?.items.filter((c) => c.tipo === "BANK" && (c.saldo_atual ?? 0) > 0) ?? [];
+  const totalBanco = contasBanco.reduce((sum, c) => sum + (c.saldo_atual ?? 0), 0);
 
   return (
-    <div className="mt-4 space-y-3">
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
-          Resultado do Mês
+    <div className="mt-4 space-y-4">
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
+        >
+          Resultado mensal
         </Typography>
-        <Typography variant="h4" color={isPositive ? "success.main" : "error.main"} fontWeight={700}>
+        <Typography
+          data-testid="resumo-resultado"
+          variant="h3"
+          style={{ color: cashflowColor }}
+          sx={{
+            fontWeight: 700,
+            mt: "var(--space-xs)",
+            fontFamily: "var(--font-family-numeric)",
+            lineHeight: 1.1,
+          }}
+        >
           {formatBRL(cashflowReal)}
+        </Typography>
+        <Typography variant="body2" sx={{ color: "var(--color-muted)", mt: "var(--space-xs)" }}>
+          Receitas e despesas consolidadas do mês selecionado.
         </Typography>
         <FlagPills flags={digest?.flags} />
       </Paper>
 
       <DigestNarrative narrative={digest?.narrative_pt} />
 
-      <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-        <div className="grid grid-cols-2 gap-4">
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: "var(--radius-lg)",
+          p: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          bgcolor: "var(--color-surface-card)",
+        }}
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Typography variant="caption" color="text.secondary">Receitas</Typography>
-            <Typography variant="body1" fontWeight={600} color="success.dark">
-              {formatBRL(cashflow.total_receitas_operacionais ?? cashflow.total_receitas)}
+            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+              Receitas
             </Typography>
-            {cashflow.total_emprestimos != null && cashflow.total_emprestimos > 0 && (
-              <Chip
-                label={`+ ${formatBRL(cashflow.total_emprestimos)} (empréstimo)`}
-                size="small"
-                color="info"
-                variant="outlined"
-                sx={{ mt: 0.5, fontSize: "0.7rem" }}
-              />
-            )}
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-up)", fontFamily: "var(--font-family-numeric)" }}>
+              {formatBRL(receitas)}
+            </Typography>
           </div>
           <div>
-            <Typography variant="caption" color="text.secondary">Despesas</Typography>
-            <Typography variant="body1" fontWeight={600} color="error.dark">{formatBRL(cashflow.total_despesas)}</Typography>
+            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+              Despesas
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-down)", fontFamily: "var(--font-family-numeric)" }}>
+              {formatBRL(despesas)}
+            </Typography>
+          </div>
+          <div className="sm:col-span-2">
+            {cashflow.total_emprestimos != null && cashflow.total_emprestimos > 0 ? (
+              <span
+                style={{
+                  borderRadius: "var(--radius-pill)",
+                  border: "1px solid color-mix(in srgb, var(--color-info) 55%, var(--color-border-hairline))",
+                  color: "var(--color-info)",
+                  backgroundColor: "color-mix(in srgb, var(--color-info) 14%, transparent)",
+                  padding: "2px var(--space-sm)",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                }}
+              >
+                + {formatBRL(cashflow.total_emprestimos)} (empréstimo)
+              </span>
+            ) : null}
+            <RunwayIndicator runway={runway} />
           </div>
         </div>
-        <RunwayIndicator runway={runway} />
       </Paper>
 
-      {patrimonio && (() => {
-        const contasBanco = patrimonio.items.filter(
-          (c) => c.tipo === "BANK" && (c.saldo_atual ?? 0) > 0
-        );
-        const totalBanco = contasBanco.reduce((sum, c) => sum + (c.saldo_atual ?? 0), 0);
-        if (contasBanco.length === 0) return null;
-        return (
-          <Paper elevation={1} sx={{ borderRadius: 2, p: 2 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
-              Saldo em Conta
-            </Typography>
-            <Typography variant="h4" fontWeight={700} sx={{ mt: 0.5, mb: 1.5 }}>
-              {formatBRL(totalBanco)}
-            </Typography>
-            {contasBanco.map((c) => (
-              <Box key={c.account_id} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {c.banco ?? c.nome}{c.dono ? ` (${c.dono.split(" ")[0]})` : ""}
-                </Typography>
-                <Typography variant="body2" fontWeight={500}>
-                  {formatBRL(c.saldo_atual ?? 0)}
-                </Typography>
-              </Box>
-            ))}
-          </Paper>
-        );
-      })()}
+      {contasBanco.length > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: "var(--radius-lg)",
+            p: "var(--space-md)",
+            border: "1px solid var(--color-border-hairline)",
+            bgcolor: "var(--color-surface-card)",
+          }}
+        >
+          <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.9 }}>
+            Patrimônio em conta
+          </Typography>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+              mt: "var(--space-xs)",
+              mb: "var(--space-sm)",
+              color: "var(--color-text-primary)",
+              fontFamily: "var(--font-family-numeric)",
+            }}
+          >
+            {formatBRL(totalBanco)}
+          </Typography>
+          {contasBanco.map((c) => (
+            <Box
+              key={c.account_id}
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                py: "var(--space-xxs)",
+                borderTop: "1px solid var(--color-border-hairline)",
+              }}
+            >
+              <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>
+                {c.banco ?? c.nome}{c.dono ? ` (${c.dono.split(" ")[0]})` : ""}
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)" }}>
+                {formatBRL(c.saldo_atual ?? 0)}
+              </Typography>
+            </Box>
+          ))}
+        </Paper>
+      )}
     </div>
   );
 }

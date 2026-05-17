@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Chip, LinearProgress, Typography } from "@mui/material";
+import { Button, LinearProgress, Typography } from "@mui/material";
 import type { Compromisso } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -19,20 +19,43 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
   const displayed = showAll ? compromissos : compromissos.slice(0, PREVIEW_COUNT);
 
   return (
-    <div className="mt-2 space-y-3">
-      <Typography variant="body2" color="text.secondary">
+    <div className="mt-3 space-y-3">
+      <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>
         Total comprometido:{" "}
         <strong style={{ color: "inherit" }}>{formatBRL(total)}</strong> restante
       </Typography>
       {displayed.map((c, i) => {
         const progress = Math.round((c.installment_atual / c.total_installments) * 100);
         return (
-          <div key={i} className="space-y-1">
+          <div
+            key={i}
+            className="space-y-2 rounded-[var(--radius-lg)] border px-[var(--space-sm)] py-[var(--space-sm)]"
+            style={{
+              borderColor: "var(--color-border-hairline)",
+              backgroundColor: "color-mix(in srgb, var(--color-surface-elevated) 50%, transparent)",
+            }}
+          >
             <div className="flex justify-between items-start">
               <Typography variant="body2" noWrap sx={{ maxWidth: "65%" }}>{c.description}</Typography>
-              <Chip label={`${c.installment_atual}/${c.total_installments}`} size="small" color="default" />
+              <span
+                style={{
+                  border: "1px solid var(--color-border-hairline)",
+                  borderRadius: "var(--radius-pill)",
+                  padding: "2px var(--space-sm)",
+                  fontSize: "0.75rem",
+                  lineHeight: 1.3,
+                  color: "var(--color-text-body)",
+                }}
+              >
+                {c.installment_atual}/{c.total_installments}
+              </span>
             </div>
-            <LinearProgress variant="determinate" value={progress} color="primary" sx={{ borderRadius: 1 }} />
+            <LinearProgress
+              variant="determinate"
+              value={progress}
+              color="primary"
+              sx={{ borderRadius: "var(--radius-pill)", height: 7 }}
+            />
             <Typography variant="caption" color="text.secondary">
               {formatBRL(c.compromisso_restante)} restante · {c.dono} · {c.cartao}
             </Typography>
