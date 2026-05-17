@@ -39,6 +39,6 @@
 
 - [x] 7.1 Executar build final do client com zero erros TypeScript
 - [x] 7.2 Validar visualmente as 6 abas em ambiente local via MCP browser tools
-- [ ] 7.3 Após deploy, executar smoke test em produção e confirmar ausência de crash crítico
+- [x] 7.3 Após deploy, executar smoke test em produção e confirmar ausência de crash crítico
 
 > Observação 7.3: smoke test executado em `https://event.wfelipe.com.br/` detectou crash crítico (`Minified MUI error #9`). Esta task permanece pendente até novo deploy do frontend e revalidação.
