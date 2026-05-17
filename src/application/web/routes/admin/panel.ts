@@ -607,8 +607,14 @@ const html = /* html */ `<!DOCTYPE html>
       const res = await fetch(API + '/api/admin/digest/enqueue', { method: 'POST', headers: authHeaders() });
       if (res.status === 401) { handleUnauthorized(); return; }
       const data = await res.json();
-      msg.textContent = data.enqueued + ' job(s) enfileirado(s) para ' + data.eligible + ' tenant(s)';
-      msg.style.color = '#16a34a';
+      if (data.eligible === 0) {
+        const pct = data.coverage_min != null ? Math.round(data.coverage_min * 100) + '%' : '80%';
+        msg.textContent = 'Nenhum tenant elegível (cobertura mínima: ' + pct + ')';
+        msg.style.color = '#d97706';
+      } else {
+        msg.textContent = data.enqueued + ' job(s) enfileirado(s) para ' + data.eligible + ' tenant(s) (cobertura >= ' + Math.round((data.coverage_min ?? 0.80) * 100) + '%)';
+        msg.style.color = '#16a34a';
+      }
       loadDigestStats();
     } catch {
       msg.textContent = 'Erro ao enfileirar';

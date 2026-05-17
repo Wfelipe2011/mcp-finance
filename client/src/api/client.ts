@@ -7,6 +7,7 @@ import type {
   Patrimonio,
   InvestimentoMensal,
   Digest,
+  DigestResponse,
   TransacoesResponse,
   Tendencias,
   User,
@@ -72,8 +73,9 @@ export function fetchInvestimentos(months = 6): Promise<InvestimentoMensal[]> {
   return get<InvestimentoMensal[]>(`/api/investimentos?months=${months}`);
 }
 
-export function fetchDigest(month: string): Promise<Digest> {
-  return get<Digest>(`/api/digest?month=${month}`);
+export async function fetchDigest(month: string): Promise<Digest | null> {
+  const res = await get<DigestResponse>(`/api/digest?month=${month}`);
+  return res.status === 'ready' ? (res.data ?? null) : null;
 }
 
 export function fetchTransacoes(month: string, limit = 50, offset = 0): Promise<TransacoesResponse> {

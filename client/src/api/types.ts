@@ -115,6 +115,12 @@ export interface NotableExpense {
   reason: string;
 }
 
+export interface DigestResponse {
+  status: 'ready' | 'pending';
+  data?: Digest;
+  coverage?: number;
+}
+
 export interface Digest {
   year: number;
   month: number;

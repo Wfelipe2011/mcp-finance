@@ -2,6 +2,7 @@ import { SQL } from "bun";
 import { BunPgAdapter } from "../../../../infrastructure/db/BunPgAdapter.ts";
 import { requireSuperAdmin } from "../../auth-middleware.ts";
 import { jsonResponse, errorResponse } from "../../helpers.ts";
+import { isDigestEligible, DIGEST_COVERAGE_MIN } from "../../../../domain/digest-policy.ts";
 
 // ── Digest Queue ───────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
     const db = new BunPgAdapter(tenantId, sql);
     try {
       const coverage = await db.getDigestCoverage(year, month);
-      if (coverage.total > 0 && coverage.enriched >= coverage.total) {
+      if (isDigestEligible(coverage.enriched, coverage.total)) {
         toEnqueue.push({ id: tenantId, year, month });
       }
     } catch {
@@ -35,6 +36,7 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
   return jsonResponse({
     enqueued: inserted,
     eligible: toEnqueue.length,
+    coverage_min: DIGEST_COVERAGE_MIN,
     year,
     month,
   });

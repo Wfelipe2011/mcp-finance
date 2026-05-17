@@ -69,12 +69,8 @@ function spawnWorker(worker: WorkerRow): ReturnType<typeof Bun.spawn> {
   };
   if (worker.ai_api_key) env["AI_API_KEY"] = worker.ai_api_key;
 
-  const scriptMap: Record<string, string> = {
-    enrich:   "src/application/workers/enrich-worker.ts",
-    digest:   "src/application/workers/digest-worker.ts",
-    forecast: "src/application/workers/forecast-worker.ts",
-  };
-  const script = scriptMap[worker.kind] ?? scriptMap["enrich"]!;
+  // Todos os workers ativos executam o shared-worker (multi-fila: enrich, digest, forecast)
+  const script = "src/application/workers/shared-worker.ts";
 
   const proc = Bun.spawn(
     ["bun", "run", script],

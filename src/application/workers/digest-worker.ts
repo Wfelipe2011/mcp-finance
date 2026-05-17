@@ -1,5 +1,6 @@
 import { BunPgAdapter } from "../../infrastructure/db/BunPgAdapter.ts";
 import { generateDigest } from "../../infrastructure/ai/digestAgent.ts";
+import { isDigestEligible } from "../../domain/digest-policy.ts";
 
 const WORKER_ID = process.env["WORKER_ID"];
 if (!WORKER_ID) throw new Error("WORKER_ID env var is required");
@@ -29,11 +30,11 @@ async function loop(): Promise<void> {
 
   const dbTenant = new BunPgAdapter(tenantId);
   try {
-    // Safety net: verify coverage is still 100%
+    // Safety net: verify coverage is still >= 80%
     const coverage = await dbTenant.getDigestCoverage(year, month);
 
-    if (coverage.total === 0 || coverage.enriched < coverage.total) {
-      console.log(`[digest-worker:${workerId}] job=${jobId} coverage=${coverage.enriched}/${coverage.total} — skipping`);
+    if (!isDigestEligible(coverage.enriched, coverage.total)) {
+      console.log(`[digest-worker:${workerId}] job=${jobId} coverage=${coverage.enriched}/${coverage.total} < 80% — skipping`);
       await db.digest_jobs.markSkipped(jobId);
       return loop();
     }

@@ -36,7 +36,7 @@ export async function generateDigest(input: DigestInput): Promise<MonthlyDigest>
     .filter((r) => r.anomaly_score !== null && r.anomaly_score > 0.6)
     .sort((a, b) => (b.anomaly_score ?? 0) - (a.anomaly_score ?? 0))
     .slice(0, 10)
-    .map((r) => `- ${r.description}: R$ ${Math.abs(r.amount_signed).toFixed(2)} (anomalia=${r.anomaly_score?.toFixed(2)}, dívida=${r.is_debt_related})`);
+    .map((r) => `- ${r.description}: R$ ${Math.abs(Number(r.amount_signed)).toFixed(2)} (anomalia=${Number(r.anomaly_score).toFixed(2)}, dívida=${r.is_debt_related})`);
 
   const historySection = input.previousDigests.length > 0
     ? `\nHISTÓRICO RECENTE (${input.previousDigests.length} meses anteriores):\n` +

@@ -1,4 +1,5 @@
 import { BunPgAdapter } from "../../infrastructure/db/BunPgAdapter.ts";
+import { isDigestEligible } from "../../domain/digest-policy.ts";
 
 async function runDigestCron(): Promise<void> {
   const rootDb = new BunPgAdapter();
@@ -19,13 +20,13 @@ async function runDigestCron(): Promise<void> {
     try {
       const coverage = await db.getDigestCoverage(year, month);
 
-      if (coverage.total === 0 || coverage.enriched < coverage.total) {
+      if (!isDigestEligible(coverage.enriched, coverage.total)) {
         console.log(`[cron] tenant=${tenantId} coverage=${coverage.enriched}/${coverage.total} — skipped`);
         continue;
       }
 
       toEnqueue.push({ id: tenantId, year, month });
-      console.log(`[cron] tenant=${tenantId} coverage=100% — enqueuing`);
+      console.log(`[cron] tenant=${tenantId} coverage=${coverage.enriched}/${coverage.total} >= 80% — enqueuing`);
     } catch (err) {
       console.error(`[cron] tenant=${tenantId} error:`, err);
     } finally {
