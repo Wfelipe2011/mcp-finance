@@ -38,6 +38,8 @@ services:
       CHOKIDAR_USEPOLLING: 1
       CHOKIDAR_INTERVAL: 10000
       TIMEZONE: America/Sao_Paulo
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

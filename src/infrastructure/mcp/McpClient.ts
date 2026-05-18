@@ -1,3 +1,15 @@
+import { Client } from "@modelcontextprotocol/sdk/client";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { DynamicStructuredTool } from "@langchain/core/tools";
+import {
+  HumanMessage,
+  AIMessage,
+  ToolMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
+
+import { ChatOpenRouter } from "@langchain/openrouter";
+
 /**
  * Cliente HTTP para comunicação com o servidor MCP interno (porta 3002).
  * Encapsula o protocolo JSON-RPC 2.0 para chamadas de `tools/call`.
@@ -12,13 +24,9 @@
 // ---------------------------------------------------------------------------
 
 /** URL base do servidor MCP. Lida em tempo de execução para facilitar testes. */
-function getMcpBaseUrl(): string {
-  return process.env["MCP_BASE_URL"] ?? "http://mcp-server:3002/mcp";
-}
-
-/** Timeout em ms para chamadas ao servidor MCP. */
-function getMcpTimeoutMs(): number {
-  return parseInt(process.env["MCP_TIMEOUT_MS"] ?? "10000", 10);
+function getMcpBaseUrl(): URL {
+  const rawUrl = process.env["MCP_BASE_URL"] ?? "http://mcp-server:3002/mcp";
+  return new URL(rawUrl);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,151 +66,117 @@ export class McpToolError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tipos internos do protocolo JSON-RPC 2.0 / MCP
-// ---------------------------------------------------------------------------
+let mcpClientPromise: Promise<Client> | null = null;
 
-interface McpContentItem {
-  type: string;
-  text?: string;
+async function getMcpClientSingleton(): Promise<Client> {
+  if (mcpClientPromise) return mcpClientPromise;
+
+  mcpClientPromise = (async () => {
+    const mcpUrl = getMcpBaseUrl();
+    const transport = new StreamableHTTPClientTransport(mcpUrl);
+
+    const client = new Client(
+      { name: "BackendBot", version: "1.0.0" },
+      { capabilities: {} },
+    );
+
+    await client.connect(transport);
+    console.log("Backend conectado ao MCP via SSE!");
+
+    return client;
+  })();
+
+  return mcpClientPromise;
 }
 
-interface McpToolResult {
-  content?: McpContentItem[];
-  isError?: boolean;
-}
+async function getLangChainToolsFromMcp() {
+  const mcpClient = await getMcpClientSingleton();
+  const mcpToolsResponse = await mcpClient.listTools();
 
-interface McpJsonRpcResponse {
-  jsonrpc: "2.0";
-  id: number;
-  result?: McpToolResult;
-  error?: { code: number; message: string; data?: unknown };
-}
+  const langchainTools = mcpToolsResponse.tools.map((mcpTool) => {
+    return new DynamicStructuredTool({
+      name: mcpTool.name,
+      description:
+        mcpTool.description || `Executa a ferramenta ${mcpTool.name}`,
+      // O MCP já usa JSON Schema, que é perfeito para o LLM
+      schema: mcpTool.inputSchema,
+      func: async (args: Record<string, unknown>) => {
+        console.log(`[Backend] LLM acionou a tool: ${mcpTool.name}`);
 
-// ---------------------------------------------------------------------------
-// Contador de requisições (monotônico, reinicia a cada processo)
-// ---------------------------------------------------------------------------
+        // Executa a tool no servidor MCP
+        const result = (await mcpClient.callTool({
+          name: mcpTool.name,
+          arguments: args,
+        })) as { content: { type: string; text: string }[] };
 
-let requestIdCounter = 0;
-
-// ---------------------------------------------------------------------------
-// Função principal
-// ---------------------------------------------------------------------------
-
-/**
- * Chama uma tool do servidor MCP via JSON-RPC 2.0 (`tools/call`).
- *
- * Fluxo:
- *  1. Serializa a chamada no formato JSON-RPC 2.0.
- *  2. Envia POST para MCP_BASE_URL com AbortController para timeout.
- *  3. Desserializa e valida o envelope de resposta de forma defensiva.
- *  4. Extrai `result.content[0].text` e retorna como string.
- *
- * @param toolName Nome da tool registrada no servidor MCP.
- * @param args     Argumentos da tool (deve incluir `tenant_id`).
- * @returns Texto extraído de `content[0].text` da resposta MCP.
- * @throws {McpTimeoutError} quando a requisição excede MCP_TIMEOUT_MS.
- * @throws {McpParseError}   quando a resposta não segue o formato esperado.
- * @throws {McpToolError}    quando a tool retorna `isError: true` ou erro JSON-RPC.
- */
-export async function callMcpTool(
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<string> {
-  const baseUrl = getMcpBaseUrl();
-  console.log("🚀 ~ callMcpTool ~ baseUrl:", baseUrl);
-  const timeoutMs = getMcpTimeoutMs();
-  console.log("🚀 ~ callMcpTool ~ timeoutMs:", timeoutMs);
-  const id = ++requestIdCounter;
-  console.log("🚀 ~ callMcpTool ~ id:", id);
-
-  const requestBody = JSON.stringify({
-    jsonrpc: "2.0",
-    id,
-    method: "tools/call",
-    params: {
-      // name: toolName,
-       arguments: args },
-  });
-  console.log("🚀 ~ callMcpTool ~ requestBody:", requestBody);
-
-  // Configura timeout via AbortController
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response: Response;
-  try {
-    response = await fetch(baseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json, text/event-stream",
+        // O MCP retorna um array de "contents". Vamos extrair o texto.
+        // Em um cenário real, você pode querer tratar erros aqui.
+        const textContent = result.content.find((c) => c.type === "text")?.text;
+        return textContent || "A ferramenta não retornou dados.";
       },
-      body: requestBody,
-      signal: controller.signal,
     });
-  } catch (err) {
-    console.log("🚀 ~ callMcpTool ~ err:", err);
-    if ((err as Error).name === "AbortError") {
-      throw new McpTimeoutError(toolName, timeoutMs);
+  });
+
+  return langchainTools;
+}
+
+
+const llm = new ChatOpenRouter({
+  model: process.env["OPENROUTER_MODEL"] ?? "deepseek-chat", // Or "deepseek/deepseek-r1" for reasoning
+  apiKey: process.env["OPENROUTER_API_KEY"] ?? "local", // Ensure this env variable is set
+  temperature: 0,
+});
+
+export async function processarMensagemDoChat(
+  mensagemDoUsuario: string,
+  tenantId: string,
+) {
+  // 1. Prepara as ferramentas
+  const tools = await getLangChainToolsFromMcp();
+  const llmComTools = llm.bindTools(tools);
+
+  // 2. Histórico da conversa (aqui estamos criando do zero, mas você
+  // idealmente pegaria do banco de dados)
+  const messages: (HumanMessage | AIMessage | ToolMessage | SystemMessage)[] = [
+    new HumanMessage(mensagemDoUsuario),
+    new SystemMessage(
+      `Você é um assistente financeiro pessoal. Responda SEMPRE em português, de forma curta e direta (no máximo 3 frases). Seja útil, claro e acionável. Não use saudações nem conclusões genéricas. Quando não souber a resposta, diga isso de forma simples. O tenant_id é ${tenantId}.`,
+    ),
+  ];
+
+  // 3. Primeira chamada ao LLM
+  console.log("[Backend] Consultando o LLM...");
+  let response = await llmComTools.invoke(messages);
+  console.log("🚀 ~ processarMensagemDoChat ~ response:", response)
+  messages.push(response);
+
+  // 4. Verifica se o LLM decidiu chamar alguma ferramenta (MCP)
+  if (response.tool_calls && response.tool_calls.length > 0) {
+    // O LLM pode querer chamar múltiplas ferramentas de uma vez
+    for (const toolCall of response.tool_calls) {
+      const toolToRun = tools.find((t) => t.name === toolCall.name);
+
+      if (toolToRun) {
+        // Isso vai disparar a função 'func' que criamos lá em cima,
+        // que por sua vez chama o mcpClient.callTool()
+        const toolResult = await toolToRun.invoke(toolCall.args);
+
+        // Adicionamos o resultado do MCP ao histórico para o LLM ler
+        messages.push(
+          new ToolMessage({
+            content: toolResult,
+            tool_call_id: toolCall.id ?? "",
+          }),
+        );
+      }
     }
-    // Erro de rede (conexão recusada, DNS, etc.) — relança para o chamador decidir
-    throw err;
-  } finally {
-    clearTimeout(timeoutHandle);
+
+    // 5. Segunda chamada ao LLM para ele ler os dados do banco e gerar a resposta final
+    console.log("[Backend] Devolvendo dados do MCP para o LLM formatar...");
+    response = await llmComTools.invoke(messages);
   }
 
-  // ---------------------------------------------------------------------------
-  // Parse defensivo da resposta
-  // ---------------------------------------------------------------------------
-
-  let json: McpJsonRpcResponse;
-  try {
-    json = (await response.json()) as McpJsonRpcResponse;
-  } catch {
-    console.log("🚀 ~ callMcpTool ~ error response");
-    throw new McpParseError(toolName, "resposta não é JSON válido");
-  }
-
-  // Erro no nível do envelope JSON-RPC (ex: método desconhecido, tool não registrada)
-  if (json.error) {
-    console.log("🚀 ~ callMcpTool ~ json.error:", json.error);
-    throw new McpToolError(toolName, json.error.message);
-  }
-
-  // Valida presença e formato de result.content
-  const result = json.result;
-  if (result === undefined || result === null) {
-    console.log("🚀 ~ callMcpTool ~ result is undefined or null");
-    throw new McpParseError(toolName, "campo 'result' ausente na resposta");
-  }
-
-  if (!Array.isArray(result.content) || result.content.length === 0) {
-    console.log("🚀 ~ callMcpTool ~ result.content is not an array or is empty");
-    throw new McpParseError(
-      toolName,
-      "campo 'result.content' ausente ou vazio",
-    );
-  }
-
-  // A tool sinalizou erro no nível de aplicação (isError: true)
-  if (result.isError === true) {
-    console.log("🚀 ~ callMcpTool ~ result.isError is true");
-    const errorText = result.content[0]?.text ?? "erro desconhecido";
-    throw new McpToolError(toolName, errorText);
-  }
-
-  // Valida que o primeiro item de content possui text como string
-  const firstItem = result.content[0];
-  console.log("🚀 ~ callMcpTool ~ firstItem:", firstItem);
-  if (!firstItem || typeof firstItem.text !== "string") {
-    console.log("🚀 ~ callMcpTool ~ firstItem.text is not a string");
-    throw new McpParseError(
-      toolName,
-      "content[0].text ausente ou não é uma string",
-    );
-  }
-
-  console.log("🚀 ~ callMcpTool ~ firstItem.text:", firstItem.text);
-  return firstItem.text;
+  console.log("🚀 ~ processarMensagemDoChat ~ messages:", messages)
+  // 6. Retorna a string final para o seu Frontend (React)
+  return response.content;
 }

@@ -1,6 +1,12 @@
 import { jsonResponse, errorResponse } from "../helpers.ts";
-import { orchestrateChat, detectIntent } from "../../../infrastructure/mcp/ChatOrchestrator.ts";
-import { McpTimeoutError, McpToolError, McpParseError } from "../../../infrastructure/mcp/McpClient.ts";
+import {
+  orchestrateChat,
+} from "../../../infrastructure/mcp/ChatOrchestrator.ts";
+import {
+  McpTimeoutError,
+  McpToolError,
+  McpParseError,
+} from "../../../infrastructure/mcp/McpClient.ts";
 
 interface ChatRequestBody {
   message?: unknown;
@@ -15,7 +21,10 @@ interface ChatRequestBody {
  * O tenantId é obtido exclusivamente do JWT autenticado (parâmetro da função),
  * nunca do body da requisição.
  */
-export async function handleChat(req: Request, tenantId: string): Promise<Response> {
+export async function handleChat(
+  req: Request,
+  tenantId: string,
+): Promise<Response> {
   let body: ChatRequestBody;
   try {
     body = (await req.json()) as ChatRequestBody;
@@ -25,7 +34,10 @@ export async function handleChat(req: Request, tenantId: string): Promise<Respon
 
   // 3.2 — Validação de entrada: message obrigatório
   if (typeof body.message !== "string" || body.message.trim() === "") {
-    return errorResponse("O campo 'message' é obrigatório e não pode estar vazio", 400);
+    return errorResponse(
+      "O campo 'message' é obrigatório e não pode estar vazio",
+      400,
+    );
   }
 
   // 3.2 — Validação de entrada: history opcional mas com estrutura válida
@@ -52,7 +64,6 @@ export async function handleChat(req: Request, tenantId: string): Promise<Respon
 
   // 3.4 — Detecta intent antecipadamente para registrar nos logs operacionais
   // sem precisar logar o conteúdo da mensagem do usuário
-  const intent = detectIntent(message);
   const inicioMs = Date.now();
 
   try {
@@ -61,7 +72,9 @@ export async function handleChat(req: Request, tenantId: string): Promise<Respon
     const reply = await orchestrateChat(message, tenantId);
 
     // 3.4 — Log operacional: latência e intent detectada (sem conteúdo sensível)
-    console.log(`[chat] status=ok intent=${intent} latencia=${Date.now() - inicioMs}ms`);
+    console.log(
+      `[chat] status=ok latencia=${Date.now() - inicioMs}ms`,
+    );
 
     return jsonResponse({ reply });
   } catch (err) {
@@ -71,7 +84,9 @@ export async function handleChat(req: Request, tenantId: string): Promise<Respon
     else if (err instanceof McpToolError) tipoErro = "MCP_TOOL_ERROR";
     else if (err instanceof McpParseError) tipoErro = "MCP_PARSE_ERROR";
 
-    console.error(`[chat] status=erro intent=${intent} latencia=${Date.now() - inicioMs}ms tipo=${tipoErro}`);
+    console.error(
+      `[chat] status=erro latencia=${Date.now() - inicioMs}ms tipo=${tipoErro}`,
+    );
 
     // 3.2 — Resposta 500 padronizada sem vazar detalhes internos ao cliente
     return errorResponse("Erro interno ao processar a resposta do chat", 500);
