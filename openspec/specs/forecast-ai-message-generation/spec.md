@@ -9,7 +9,7 @@ The system SHALL run a daily cron job at 00:30 BRT that generates a personalized
 #### Scenario: Message generated when predictions exist
 - **WHEN** the forecast cron runs and `forecast_predictions` has rows with `status = 'ok'` for the tenant
 - **THEN** the cron builds an LLM context with: current month spending by group (Necessidades/Desejos/Poupança), predictions for the next 3 months by group, and 50/30/20 compliance status
-- **AND** calls the LLM via `AI_BASE_URL` / `AI_MODEL` with a prompt requesting a 1-2 sentence actionable message in Portuguese
+- **AND** calls the LLM via `AI_BASE_URL` / `AI_MODEL` with a prompt requesting a 1-2 sentence actionable message in Brazilian Portuguese
 - **AND** saves the result to `forecast_ai_messages` via UPSERT
 
 #### Scenario: Tenant skipped when predictions unavailable
@@ -21,7 +21,10 @@ The system SHALL run a daily cron job at 00:30 BRT that generates a personalized
 - **THEN** the error is logged and the cron continues to the next tenant
 - **AND** no partial state is written for the failed tenant
 
-#### Scenario: Message is concise and actionable
-- **WHEN** the LLM generates the forecast message
-- **THEN** the prompt instructs the LLM to respond in 1-2 sentences maximum, in Portuguese, with a concrete observation or action item based on the forecast data
+#### Scenario: Message is concise and actionable with financial advisor persona
+- **WHEN** the LLM generates the daily insight message via `generateDailyInsightMessage()`
+- **THEN** the system prompt is written in English with a financial advisor persona
+- **AND** instructs the model to respond in Brazilian Portuguese (pt-BR)
+- **AND** the output is maximum 2 sentences, direct, specific, referencing the category name and average amount
+- **AND** suggests ONE concrete action the user can take today
 
