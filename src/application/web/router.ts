@@ -21,7 +21,7 @@ import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
 import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
-import { handleForecastDaily } from "./routes/forecast/daily.ts";
+import { handleForecastDaily, handleForecastDailyRegenerate } from "./routes/forecast/daily.ts";
 import { handleForecastFeedbackDeviations, handleForecastFeedbackSave, handleForecastFeedbackRetrain } from "./routes/forecast/feedback.ts";
 import { handleDailyTrain, handleDailyModelVersions, handleDailyTestResults, handleDailyActivate, handleDailyDeleteModelFile, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
 
@@ -68,6 +68,7 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
   if (path === "/api/forecast/daily" && req.method === "GET") return handleForecastDaily(req, tenantId, sql);
+  if (path === "/api/forecast/daily/regenerate" && req.method === "POST") return handleForecastDailyRegenerate(req, tenantId, sql);
   if (path === "/api/forecast/feedback/deviations" && req.method === "GET") return handleForecastFeedbackDeviations(req, url, tenantId, sql);
   if (path === "/api/forecast/feedback" && req.method === "POST") return handleForecastFeedbackSave(req, tenantId, sql);
   if (path === "/api/forecast/feedback/retrain" && req.method === "POST") return handleForecastFeedbackRetrain(req, tenantId, sql);

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { Box, Paper, Typography, IconButton, Chip, CircularProgress } from "@mui/material";
+import { Box, Paper, Typography, IconButton, Chip, CircularProgress, Button } from "@mui/material";
 import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
 import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
-import { fetchMessagesRange } from "../api/client.ts";
-import type { MessagesRange } from "../api/types.ts";
+import { fetchMessagesRange, regenerateDailyInsight } from "../api/client.ts";
+import { DailyInsightCard } from "./DailyInsightCard.tsx";
+import type { MessagesRange, DailyInsight } from "../api/types.ts";
 
 const MONTH_NAMES = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -30,19 +31,42 @@ function isDayFuture(dateStr: string): boolean {
 }
 
 function MessageContent({ dateStr }: { dateStr: string }) {
-  const [msg, setMsg] = useState<{ message_pt: string; context_json?: Record<string, unknown> } | null>(null);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isToday = dateStr === todayStr;
+
+  const [msg, setMsg] = useState<DailyInsight | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setRegenError(null);
     fetch(`/api/forecast/daily?date=${dateStr}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("authToken") ?? ""}` },
     })
       .then(r => r.ok ? r.json() : null)
-      .then(data => setMsg(data))
+      .then((data: DailyInsight | null) => setMsg(data))
       .catch(() => setMsg(null))
       .finally(() => setLoading(false));
   }, [dateStr]);
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    setRegenError(null);
+    try {
+      const data = await regenerateDailyInsight();
+      setMsg(data);
+    } catch (err: any) {
+      if (err?.status === 409) {
+        setRegenError("Sem previsões disponíveis para hoje");
+      } else {
+        setRegenError("Erro ao regenerar. Tente novamente.");
+      }
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   if (loading) return <CircularProgress size={20} />;
 
@@ -60,12 +84,31 @@ function MessageContent({ dateStr }: { dateStr: string }) {
       {!past && !future && (
         <Chip label="Hoje" size="small" sx={{ mb: 1, background: "color-mix(in srgb, #2e7d32 18%, transparent)", color: "#2e7d32" }} />
       )}
-      {msg?.message_pt ? (
-        <Typography variant="body1">{msg.message_pt}</Typography>
+
+      {msg ? (
+        <DailyInsightCard insight={msg} />
       ) : (
         <Typography variant="body2" color="text.secondary">
           Sem mensagem disponível para este dia.
         </Typography>
+      )}
+
+      {isToday && (
+        <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={regenerating}
+            onClick={() => void handleRegenerate()}
+          >
+            {regenerating ? <><CircularProgress size={16} /> Regenerando...</> : "Regerar"}
+          </Button>
+          {regenError && (
+            <Typography variant="caption" sx={{ color: "var(--color-error, #d32f2f)" }}>
+              {regenError}
+            </Typography>
+          )}
+        </Box>
       )}
     </Box>
   );
@@ -158,3 +201,4 @@ export default function DailyInsightsNavigator() {
     </Paper>
   );
 }
+

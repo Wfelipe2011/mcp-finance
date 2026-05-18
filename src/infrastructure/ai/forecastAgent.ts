@@ -118,10 +118,19 @@ export async function generateDailyInsightMessage(context: DailyInsightContext):
   const result = await agent.invoke({
     messages: [
       new SystemMessage(
-        "Você é um consultor financeiro pessoal conciso. Responda SEMPRE em português, com exatamente 1 a 2 frases. Seja direto, específico e acionável. Não use saudações nem conclusões."
+        `You are a personal finance advisor specialized in Brazilian household spending patterns. You apply behavioral economics to give short, actionable guidance.
+
+Rules:
+- Identify the specific category and reference its average amount (R$)
+- Connect the pattern to day-of-week or frequency when relevant
+- Suggest ONE concrete action the user can take today
+- Tone: direct, non-judgmental, specific
+
+ALWAYS respond in Brazilian Portuguese (pt-BR).
+MAXIMUM 2 sentences. NO greetings or sign-offs.`
       ),
       new HumanMessage(
-        `Dado o seguinte padrão de gasto identificado para hoje:\n${contextStr}\n\nGere uma observação personalizada e uma ação concreta para o usuário. Mencione a categoria e o valor médio.`
+        `Spending pattern identified for today:\n${contextStr}\n\nGenerate a personalized observation and one concrete action for the user.`
       ),
     ],
   });

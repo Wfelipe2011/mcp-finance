@@ -298,6 +298,19 @@ export function fetchMessagesRange(): Promise<MessagesRange> {
   return get<MessagesRange>("/api/forecast/daily/messages-range");
 }
 
+export async function regenerateDailyInsight(): Promise<DailyInsight> {
+  const res = await fetch("/api/forecast/daily/regenerate", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw Object.assign(new Error((body as { error?: string }).error ?? res.statusText), { status: res.status });
+  }
+  return res.json() as Promise<DailyInsight>;
+}
+
 export async function requestDailyTrain(): Promise<{ version_name: string; status: string }> {
   const res = await fetch("/api/forecast/daily/train", {
     method: "POST",
