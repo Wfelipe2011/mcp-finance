@@ -1,3 +1,12 @@
+/**
+ * @deprecated Este módulo não é mais utilizado pelo endpoint `/api/chat`.
+ * O fluxo de chat foi migrado para orquestração via MCP em
+ * `src/infrastructure/mcp/ChatOrchestrator.ts` (change: chat-endpoint-via-mcp).
+ *
+ * O arquivo é mantido apenas porque pode ser reaproveitado em cenários futuros
+ * que requeiram resposta por LLM direto. Não introduza novos imports deste módulo
+ * no caminho web sem revisar o change.
+ */
 import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { model } from "./model.js";
 
