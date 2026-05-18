@@ -23,6 +23,7 @@ import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
 import { handleForecastDaily } from "./routes/forecast/daily.ts";
 import { handleForecastFeedbackDeviations, handleForecastFeedbackSave, handleForecastFeedbackRetrain } from "./routes/forecast/feedback.ts";
+import { handleDailyTrain, handleDailyModelVersions, handleDailyTestResults, handleDailyActivate, handleDailyDeleteModelFile, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
 
 export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
   const path = url.pathname;
@@ -70,6 +71,16 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/feedback/deviations" && req.method === "GET") return handleForecastFeedbackDeviations(req, url, tenantId, sql);
   if (path === "/api/forecast/feedback" && req.method === "POST") return handleForecastFeedbackSave(req, tenantId, sql);
   if (path === "/api/forecast/feedback/retrain" && req.method === "POST") return handleForecastFeedbackRetrain(req, tenantId, sql);
+
+  if (path === "/api/forecast/daily/train" && req.method === "POST") return handleDailyTrain(req, tenantId, sql);
+  if (path === "/api/forecast/daily/model-versions" && req.method === "GET") return handleDailyModelVersions(req, tenantId, sql);
+  if (path === "/api/forecast/daily/test-results" && req.method === "GET") return handleDailyTestResults(req, url, tenantId, sql);
+  if (path === "/api/forecast/daily/activate" && req.method === "POST") return handleDailyActivate(req, tenantId, sql);
+  if (path === "/api/forecast/daily/model-file" && req.method === "DELETE") return handleDailyDeleteModelFile(req, tenantId, sql);
+  if (path === "/api/forecast/daily/category-exclusions" && req.method === "GET") return handleDailyCategoryExclusionsGet(req, tenantId, sql);
+  if (path === "/api/forecast/daily/category-exclusions" && req.method === "POST") return handleDailyCategoryExclusionsPost(req, tenantId, sql);
+  if (path === "/api/forecast/daily/daily-exclusions" && req.method === "POST") return handleDailyExclusionsPost(req, tenantId, sql);
+  if (path === "/api/forecast/daily/messages-range" && req.method === "GET") return handleDailyMessagesRange(req, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }

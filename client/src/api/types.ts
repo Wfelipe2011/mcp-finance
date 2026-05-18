@@ -247,3 +247,47 @@ export interface FeedbackItem {
 export interface FeedbackResponse {
   saved: number;
 }
+
+// ── ml-daily-trainer ────────────────────────────────────
+export interface ModelVersion {
+  id: number;
+  version_name: string;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  status: 'staging' | 'production' | 'archived';
+  mae: number | null;
+  mape: number | null;
+  accuracy_pct: number | null;
+  num_train: number | null;
+  num_test: number | null;
+  exclusions_applied: string[];
+  created_at: string;
+  activated_at: string | null;
+  archived_at: string | null;
+}
+
+export interface DailyTestResult {
+  id: number;
+  version_name: string;
+  transaction_date: string;
+  category_pt: string;
+  group_pt: string;
+  predicted_amount: number;
+  actual_amount: number;
+  deviation_pct: number;
+}
+
+export interface CategoryExclusion {
+  category_pt: string;
+  excluded: boolean;
+}
+
+export interface DailyExclusion {
+  transaction_date: string;
+  category_pt: string;
+  correction_tag: string | null;
+}
+
+export interface MessagesRange {
+  dates: string[];
+}

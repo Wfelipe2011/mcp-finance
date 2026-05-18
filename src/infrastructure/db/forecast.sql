@@ -200,3 +200,113 @@ ALTER TABLE forecast_ai_messages DROP CONSTRAINT IF EXISTS forecast_ai_messages_
 
 ALTER TABLE forecast_ai_messages ADD CONSTRAINT forecast_ai_messages_tenant_date_type_unique
   UNIQUE (tenant_id, message_date, message_type);
+
+-- ────────────────────────────────────────────────
+-- forecast_model_versions
+-- Versões do modelo diário por tenant
+-- change: ml-daily-trainer / task 1.1
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS forecast_model_versions (
+  id                    BIGSERIAL PRIMARY KEY,
+  tenant_id             UUID      NOT NULL REFERENCES tenants(id),
+  version_name          TEXT      NOT NULL,
+  file_path             TEXT,
+  status                TEXT      NOT NULL DEFAULT 'staging' CHECK (status IN ('staging','production','archived')),
+  mae                   NUMERIC(18,4),
+  mape                  NUMERIC(18,4),
+  accuracy_pct          NUMERIC(5,4),
+  num_train             INTEGER,
+  num_test              INTEGER,
+  exclusions_applied    JSONB     NOT NULL DEFAULT '[]',
+  created_at            TIMESTAMP NOT NULL DEFAULT NOW(),
+  activated_at          TIMESTAMP,
+  archived_at           TIMESTAMP,
+  UNIQUE (tenant_id, version_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_model_versions_tenant_status
+  ON forecast_model_versions (tenant_id, status);
+
+ALTER TABLE forecast_model_versions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY forecast_model_versions_tenant_isolation
+  ON forecast_model_versions
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+GRANT ALL ON TABLE    forecast_model_versions          TO finance;
+GRANT ALL ON SEQUENCE forecast_model_versions_id_seq   TO finance;
+
+-- ────────────────────────────────────────────────
+-- forecast_daily_test_results
+-- Conjunto de teste do split 80/20 por versão de modelo
+-- change: ml-daily-trainer / task 1.2
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS forecast_daily_test_results (
+  id                BIGSERIAL PRIMARY KEY,
+  tenant_id         UUID          NOT NULL REFERENCES tenants(id),
+  version_name      TEXT          NOT NULL,
+  transaction_date  DATE          NOT NULL,
+  category_pt       TEXT          NOT NULL,
+  group_pt          TEXT          NOT NULL,
+  predicted_amount  NUMERIC(18,2) NOT NULL,
+  actual_amount     NUMERIC(18,2) NOT NULL,
+  deviation_pct     NUMERIC(10,4) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_daily_test_results_tenant_version
+  ON forecast_daily_test_results (tenant_id, version_name);
+
+ALTER TABLE forecast_daily_test_results ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY forecast_daily_test_results_tenant_isolation
+  ON forecast_daily_test_results
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+GRANT ALL ON TABLE    forecast_daily_test_results          TO finance;
+GRANT ALL ON SEQUENCE forecast_daily_test_results_id_seq   TO finance;
+
+-- ────────────────────────────────────────────────
+-- forecast_category_exclusions
+-- Categorias excluídas globalmente do treinamento por tenant
+-- change: ml-daily-trainer / task 1.3
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS forecast_category_exclusions (
+  id           BIGSERIAL PRIMARY KEY,
+  tenant_id    UUID      NOT NULL REFERENCES tenants(id),
+  category_pt  TEXT      NOT NULL,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (tenant_id, category_pt)
+);
+
+ALTER TABLE forecast_category_exclusions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY forecast_category_exclusions_tenant_isolation
+  ON forecast_category_exclusions
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+GRANT ALL ON TABLE    forecast_category_exclusions          TO finance;
+GRANT ALL ON SEQUENCE forecast_category_exclusions_id_seq   TO finance;
+
+-- ────────────────────────────────────────────────
+-- forecast_daily_exclusions
+-- Pares (date, category) excluídos do treino via feedback 👎
+-- change: ml-daily-trainer / task 1.4
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS forecast_daily_exclusions (
+  id               BIGSERIAL PRIMARY KEY,
+  tenant_id        UUID      NOT NULL REFERENCES tenants(id),
+  transaction_date DATE      NOT NULL,
+  category_pt      TEXT      NOT NULL,
+  correction_tag   TEXT      CHECK (correction_tag IN ('Viagem','Evento especial','Mudança de hábito','Outra situação atípica')),
+  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (tenant_id, transaction_date, category_pt)
+);
+
+ALTER TABLE forecast_daily_exclusions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY forecast_daily_exclusions_tenant_isolation
+  ON forecast_daily_exclusions
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+GRANT ALL ON TABLE    forecast_daily_exclusions          TO finance;
+GRANT ALL ON SEQUENCE forecast_daily_exclusions_id_seq   TO finance;

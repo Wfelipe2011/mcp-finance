@@ -37,6 +37,8 @@ services:
         condition: service_healthy
       auth:
         condition: service_started
+    volumes:
+      - ml_models:/models
     restart: unless-stopped
 
   mcp-server:
@@ -89,6 +91,20 @@ services:
       postgres:
         condition: service_healthy
     restart: always
+
+  ml-daily-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-daily
+    volumes:
+      - ml_models:/models
+    environment:
+      ML_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MODEL_STORAGE_PATH: /models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   forecast-cron:
     build: .
@@ -151,3 +167,4 @@ services:
 
 volumes:
   postgres_data:
+  ml_models:
