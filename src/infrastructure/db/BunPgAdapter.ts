@@ -1746,7 +1746,24 @@ export class BunPgAdapter {
             WHERE fp.tenant_id = ${tid}::uuid
               AND fp.target_year = ${year}
               AND fp.target_month = ${month}
-            ORDER BY ABS(deviation_pct) DESC
+            ORDER BY ABS(
+              CASE
+                WHEN fp.predicted_amount = 0 THEN 0
+                ELSE ROUND(
+                  (COALESCE(
+                    (SELECT SUM(ABS(te.amount))
+                     FROM transactions_enriched te
+                     JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
+                     WHERE tm.tenant_id = ${tid}::uuid
+                       AND te.amount < 0
+                       AND te.category_pt = fp.category_pt
+                       AND EXTRACT(YEAR FROM te.date::date) = ${year}
+                       AND EXTRACT(MONTH FROM te.date::date) = ${month}
+                    ), 0
+                  ) - fp.predicted_amount) / fp.predicted_amount * 100, 2
+                )
+              END
+            ) DESC
           `;
         });
         return rows.map(r => ({

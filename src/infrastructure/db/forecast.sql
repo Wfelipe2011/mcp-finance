@@ -157,12 +157,8 @@ CREATE TABLE IF NOT EXISTS daily_insight_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_daily_insight_jobs_status ON daily_insight_jobs (status);
 
-ALTER TABLE daily_insight_jobs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY daily_insight_jobs_tenant_isolation
-  ON daily_insight_jobs
-  USING (tenant_id = current_setting('app.tenant_id')::uuid);
-
+-- Sem RLS: daily_insight_jobs é fila de sistema (como forecast_jobs e digest_jobs).
+-- Isolamento por tenant_id é feito na lógica do worker/admin, não via RLS.
 GRANT ALL ON TABLE    daily_insight_jobs          TO finance;
 GRANT ALL ON SEQUENCE daily_insight_jobs_id_seq   TO finance;
 

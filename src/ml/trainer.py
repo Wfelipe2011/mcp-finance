@@ -339,7 +339,7 @@ def generate_daily_predictions(
 
     results = []
 
-    for d in range(1, days + 1):
+    for d in range(0, days):
         target_date = today + timedelta(days=d)
         dow = target_date.weekday()  # 0=Monday..6=Sunday (Python)
         dom = target_date.day

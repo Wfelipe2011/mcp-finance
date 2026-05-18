@@ -146,15 +146,12 @@ export async function handleDailyInsightEnqueue(req: Request, sql: SQL): Promise
 
   let inserted = 0;
   for (const tenantId of tenantIds) {
-    const rows = await sql.begin(async (tx) => {
-      await tx`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
-      return tx`
-        INSERT INTO daily_insight_jobs (tenant_id, job_date)
-        VALUES (${tenantId}::uuid, ${today}::date)
-        ON CONFLICT (tenant_id, job_date) DO NOTHING
-        RETURNING id
-      `;
-    });
+    const rows = await sql`
+      INSERT INTO daily_insight_jobs (tenant_id, job_date)
+      VALUES (${tenantId}::uuid, ${today}::date)
+      ON CONFLICT (tenant_id, job_date) DO NOTHING
+      RETURNING id
+    `;
     inserted += rows.length;
   }
 
