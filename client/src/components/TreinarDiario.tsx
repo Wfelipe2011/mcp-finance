@@ -242,6 +242,21 @@ export default function TreinarDiario() {
                 <Typography variant="caption" color="text.secondary">
                   {formatBytes(v.file_size_bytes)}
                 </Typography>
+                {v.accuracy_pct != null && (
+                  <Typography
+                    variant="caption"
+                    fontWeight={700}
+                    sx={{
+                      color: v.accuracy_pct >= 0.7
+                        ? "var(--color-success, #2e7d32)"
+                        : v.accuracy_pct >= 0.5
+                          ? "#ed6c02"
+                          : "#d32f2f",
+                    }}
+                  >
+                    {(v.accuracy_pct * 100).toFixed(0)}% acertos
+                  </Typography>
+                )}
                 {v.status !== "production" && (
                   <>
                     {v.status === "staging" && (
@@ -325,17 +340,26 @@ export default function TreinarDiario() {
                 <Box key={i} sx={{ py: 0.5 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 90 }}>
-                      {r.transaction_date}
+                      {r.transaction_date.substring(0, 10)}
                     </Typography>
                     <Typography variant="caption" sx={{ flex: 1 }}>
                       {r.category_pt}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      R$ {r.actual_amount.toFixed(2).replace(".", ",")}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      →
+                    </Typography>
+                    <Typography variant="caption">
+                      R$ {r.predicted_amount.toFixed(2).replace(".", ",")}
                     </Typography>
                     <Typography
                       variant="caption"
                       fontWeight={600}
                       sx={{ color: deviationColor(r.deviation_pct) }}
                     >
-                      {r.deviation_pct > 0 ? "+" : ""}{r.deviation_pct.toFixed(1)}%
+                      ({r.deviation_pct > 0 ? "+" : ""}{r.deviation_pct.toFixed(1)}%)
                     </Typography>
                     <Button
                       size="small"
