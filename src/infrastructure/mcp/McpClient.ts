@@ -9,6 +9,9 @@ import {
 } from "@langchain/core/messages";
 
 import { ChatOpenRouter } from "@langchain/openrouter";
+import { createAgent } from "langchain";
+
+import { MemorySaver, StateGraph } from "@langchain/langgraph";
 
 /**
  * Cliente HTTP para comunicação com o servidor MCP interno (porta 3002).
@@ -126,57 +129,24 @@ const llm = new ChatOpenRouter({
   apiKey: process.env["OPENROUTER_API_KEY"] ?? "local", // Ensure this env variable is set
   temperature: 0,
 });
+const tools = await getLangChainToolsFromMcp();
+const checkpointer = new MemorySaver();
+const agent = createAgent({ model: llm, checkpointer, tools });
 
 export async function processarMensagemDoChat(
   mensagemDoUsuario: string,
   tenantId: string,
 ) {
-  // 1. Prepara as ferramentas
-  const tools = await getLangChainToolsFromMcp();
-  const llmComTools = llm.bindTools(tools);
+  // 3. Primeira chamada ao LLM
+  console.log("[Backend] Consultando o LLM...");
 
-  // 2. Histórico da conversa (aqui estamos criando do zero, mas você
-  // idealmente pegaria do banco de dados)
-  const messages: (HumanMessage | AIMessage | ToolMessage | SystemMessage)[] = [
-    new HumanMessage(mensagemDoUsuario),
+  let response = await agent.invoke({messages: [
     new SystemMessage(
       `Você é um assistente financeiro pessoal. Responda SEMPRE em português, de forma curta e direta (no máximo 3 frases). Seja útil, claro e acionável. Não use saudações nem conclusões genéricas. Quando não souber a resposta, diga isso de forma simples. O tenant_id é ${tenantId}.`,
     ),
-  ];
+    new HumanMessage(mensagemDoUsuario),
+  ]});
 
-  // 3. Primeira chamada ao LLM
-  console.log("[Backend] Consultando o LLM...");
-  let response = await llmComTools.invoke(messages);
-  console.log("🚀 ~ processarMensagemDoChat ~ response:", response)
-  messages.push(response);
-
-  // 4. Verifica se o LLM decidiu chamar alguma ferramenta (MCP)
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    // O LLM pode querer chamar múltiplas ferramentas de uma vez
-    for (const toolCall of response.tool_calls) {
-      const toolToRun = tools.find((t) => t.name === toolCall.name);
-
-      if (toolToRun) {
-        // Isso vai disparar a função 'func' que criamos lá em cima,
-        // que por sua vez chama o mcpClient.callTool()
-        const toolResult = await toolToRun.invoke(toolCall.args);
-
-        // Adicionamos o resultado do MCP ao histórico para o LLM ler
-        messages.push(
-          new ToolMessage({
-            content: toolResult,
-            tool_call_id: toolCall.id ?? "",
-          }),
-        );
-      }
-    }
-
-    // 5. Segunda chamada ao LLM para ele ler os dados do banco e gerar a resposta final
-    console.log("[Backend] Devolvendo dados do MCP para o LLM formatar...");
-    response = await llmComTools.invoke(messages);
-  }
-
-  console.log("🚀 ~ processarMensagemDoChat ~ messages:", messages)
   // 6. Retorna a string final para o seu Frontend (React)
-  return response.content;
+  return response.messages.at(-1)?.content;
 }

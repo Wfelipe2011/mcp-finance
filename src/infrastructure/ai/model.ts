@@ -1,5 +1,4 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { ChatOpenRouter } from "@langchain/openrouter"
 
 // --- OpenAI (modelo padrão, usado pelos agentes existentes) ---
 const baseURL = process.env["AI_BASE_URL"];
