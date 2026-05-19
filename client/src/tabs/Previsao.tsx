@@ -2,20 +2,14 @@ import { useState, useEffect } from "react";
 import { Box, Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, useMediaQuery } from "@mui/material";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import { BarChart } from "@mui/x-charts/BarChart";
-import { fetchForecastMessage, fetchForecastGroups, fetchForecastCategories } from "../api/client.ts";
-import type { CashflowProjetado, ForecastMessage, ForecastGroupsResponse, ForecastCategoriesResponse } from "../api/types.ts";
+import { fetchForecastMessage, fetchForecastGroups, fetchForecastCategories, fetchDailyInsight } from "../api/client.ts";
+import type { CashflowProjetado, ForecastMessage, ForecastGroupsResponse, ForecastCategoriesResponse, DailyInsight } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { CashflowAreaChart } from "../components/CashflowAreaChart.tsx";
+import { DailyInsightCard } from "../components/DailyInsightCard.tsx";
 import { formatBRL } from "../utils/format.ts";
 import { amountToTone } from "../utils/semanticTone.ts";
-
-// Baseline de espaçamento interno (tasks 3.1–3.4):
-// - p dos Paper: var(--space-md)
-// - gap caption → valor (h3): mt: "var(--space-xs)"
-// - gap valor → body2: mt: "var(--space-xs)"
-// - gap caption → componente filho: mb: "var(--space-xs)" na caption ou <Box sx={{ mt: "var(--space-xs)" }}>
-// - gap entre cards em stack: space-y-4 (Tailwind) — manter
 
 function monthLabel(year: number, month: number): string {
   const date = new Date(year, month - 1, 1);
@@ -167,6 +161,13 @@ export function Previsao() {
   const [categoriesData, setCategoriesData] = useState<ForecastCategoriesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dailyInsight, setDailyInsight] = useState<DailyInsight | null | undefined>(undefined);
+
+  useEffect(() => {
+    fetchDailyInsight()
+      .then((data) => setDailyInsight(data))
+      .catch(() => setDailyInsight(null));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -209,6 +210,7 @@ export function Previsao() {
 
   return (
     <div className="mt-4 space-y-4">
+      {dailyInsight && <DailyInsightCard insight={dailyInsight} />}
       <Paper
         elevation={0}
         sx={{

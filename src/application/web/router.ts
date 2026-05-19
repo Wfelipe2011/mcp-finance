@@ -4,7 +4,7 @@ import { serveAdminPanel } from "./routes/admin/panel.ts";
 import { handleAdminLogin } from "./routes/admin/login.ts";
 import { handleCreateWorker, handleListWorkers, handleUpdateWorker, handleDeleteWorker, handleQueueStats } from "./routes/admin/workers.ts";
 import { handleListTenants, handleCreateTenant, handleToggleTenantStatus } from "./routes/admin/tenants.ts";
-import { handleDigestEnqueue, handleDigestQueueStats, handleForecastEnqueue, handleForecastQueueStats, handleMlEnqueue, handleMlQueueStats } from "./routes/admin/pipeline-queues.ts";
+import { handleDigestEnqueue, handleDigestQueueStats, handleForecastEnqueue, handleForecastQueueStats, handleMlEnqueue, handleMlQueueStats, handleDailyInsightEnqueue, handleDailyInsightQueueStats } from "./routes/admin/pipeline-queues.ts";
 import { handleCashflow, handleCashflowProjetado } from "./routes/cashflow.ts";
 import { handleGastos } from "./routes/gastos.ts";
 import { handleCompromissos } from "./routes/compromissos.ts";
@@ -22,6 +22,9 @@ import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
 import { handleChat } from "./routes/chat.ts";
+import { handleForecastDaily, handleForecastDailyRegenerate } from "./routes/forecast/daily.ts";
+import { handleForecastFeedbackDeviations, handleForecastFeedbackSave, handleForecastFeedbackRetrain } from "./routes/forecast/feedback.ts";
+import { handleDailyTrain, handleDailyModelVersions, handleDailyTestResults, handleDailyActivate, handleDailyDeleteModelFile, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
 
 export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
   const path = url.pathname;
@@ -45,6 +48,8 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/admin/forecast/queue-stats" && req.method === "GET") return handleForecastQueueStats(req, sql);
   if (path === "/api/admin/ml/enqueue" && req.method === "POST") return handleMlEnqueue(req, sql);
   if (path === "/api/admin/ml/queue-stats" && req.method === "GET") return handleMlQueueStats(req, sql);
+  if (path === "/api/admin/daily-insight/enqueue" && req.method === "POST") return handleDailyInsightEnqueue(req, sql);
+  if (path === "/api/admin/daily-insight/queue-stats" && req.method === "GET") return handleDailyInsightQueueStats(req, sql);
 
   if (path === "/api/sync" && req.method === "POST") return handleSync(req, tenantId, sql);
   if (path === "/api/users" && req.method === "GET") return handleGetUsers(req, tenantId, sql);
@@ -64,6 +69,21 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
   if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId);
+  if (path === "/api/forecast/daily" && req.method === "GET") return handleForecastDaily(req, tenantId, sql);
+  if (path === "/api/forecast/daily/regenerate" && req.method === "POST") return handleForecastDailyRegenerate(req, tenantId, sql);
+  if (path === "/api/forecast/feedback/deviations" && req.method === "GET") return handleForecastFeedbackDeviations(req, url, tenantId, sql);
+  if (path === "/api/forecast/feedback" && req.method === "POST") return handleForecastFeedbackSave(req, tenantId, sql);
+  if (path === "/api/forecast/feedback/retrain" && req.method === "POST") return handleForecastFeedbackRetrain(req, tenantId, sql);
+
+  if (path === "/api/forecast/daily/train" && req.method === "POST") return handleDailyTrain(req, tenantId, sql);
+  if (path === "/api/forecast/daily/model-versions" && req.method === "GET") return handleDailyModelVersions(req, tenantId, sql);
+  if (path === "/api/forecast/daily/test-results" && req.method === "GET") return handleDailyTestResults(req, url, tenantId, sql);
+  if (path === "/api/forecast/daily/activate" && req.method === "POST") return handleDailyActivate(req, tenantId, sql);
+  if (path === "/api/forecast/daily/model-file" && req.method === "DELETE") return handleDailyDeleteModelFile(req, tenantId, sql);
+  if (path === "/api/forecast/daily/category-exclusions" && req.method === "GET") return handleDailyCategoryExclusionsGet(req, tenantId, sql);
+  if (path === "/api/forecast/daily/category-exclusions" && req.method === "POST") return handleDailyCategoryExclusionsPost(req, tenantId, sql);
+  if (path === "/api/forecast/daily/daily-exclusions" && req.method === "POST") return handleDailyExclusionsPost(req, tenantId, sql);
+  if (path === "/api/forecast/daily/messages-range" && req.method === "GET") return handleDailyMessagesRange(req, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }

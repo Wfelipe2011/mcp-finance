@@ -45,6 +45,8 @@ services:
         condition: service_healthy
       auth:
         condition: service_started
+    volumes:
+      - ml_models:/models
     restart: unless-stopped
 
   mcp-server:
@@ -111,6 +113,20 @@ services:
         condition: service_healthy
     restart: always
 
+  ml-daily-trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-daily
+    volumes:
+      - ml_models:/models
+    environment:
+      ML_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MODEL_STORAGE_PATH: /models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   forecast-cron:
     build: .
     command: bun run forecast-cron
@@ -125,6 +141,29 @@ services:
       postgres:
         condition: service_healthy
     restart: always
+
+  daily-insight-cron:
+    build: .
+    command: bun run src/application/cron/daily-insight-cron.ts
+    environment:
+      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  daily-insight-worker:
+    build: .
+    command: bun run src/application/workers/daily-insight-worker.ts
+    environment:
+      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   postgres:
     image: postgres:16
@@ -153,3 +192,4 @@ services:
 
 volumes:
   postgres_data:
+  ml_models:

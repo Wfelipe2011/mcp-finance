@@ -215,3 +215,93 @@ export interface ChatRequest {
 export interface ChatResponse {
   reply: string;
 }
+
+export interface SecondaryInsight {
+  category_pt: string;
+  group_pt: string;
+  probability: number;
+  estimated_amount: number;
+  lower_bound: number;
+  upper_bound: number;
+}
+
+export interface DailyInsight {
+  has_insight: boolean;
+  insight_type: string;
+  message_pt: string;
+  category_pt: string | null;
+  group_pt: string | null;
+  probability: number | null;
+  estimated_amount: number | null;
+  lower_bound: number | null;
+  upper_bound: number | null;
+  signal_count: number | null;
+  period_months: number;
+  insight_date: string;
+  secondary_insights: SecondaryInsight[];
+}
+
+export interface ForecastDeviation {
+  prediction_id: number;
+  category_pt: string;
+  group_pt: string;
+  predicted_amount: number;
+  actual_amount: number;
+  deviation_pct: number;
+  user_rating: string | null;
+  correction_tag: string | null;
+}
+
+export interface FeedbackItem {
+  prediction_id: number;
+  rating: 'up' | 'down';
+  correction_tag?: string | null;
+}
+
+export interface FeedbackResponse {
+  saved: number;
+}
+
+// ── ml-daily-trainer ────────────────────────────────────
+export interface ModelVersion {
+  id: number;
+  version_name: string;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  status: 'staging' | 'production' | 'archived';
+  mae: number | null;
+  mape: number | null;
+  accuracy_pct: number | null;
+  num_train: number | null;
+  num_test: number | null;
+  exclusions_applied: string[];
+  created_at: string;
+  activated_at: string | null;
+  archived_at: string | null;
+}
+
+export interface DailyTestResult {
+  id: number;
+  version_name: string;
+  transaction_date: string;
+  category_pt: string;
+  group_pt: string;
+  predicted_amount: number;
+  actual_amount: number;
+  deviation_pct: number;
+}
+
+export interface CategoryExclusion {
+  category_pt: string;
+  excluded: boolean;
+}
+
+export interface DailyExclusion {
+  transaction_date: string;
+  category_pt: string;
+  correction_tag: string | null;
+}
+
+export interface MessagesRange {
+  dates: string[];
+}

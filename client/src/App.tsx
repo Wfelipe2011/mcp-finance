@@ -16,7 +16,6 @@ import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import ShowChartRoundedIcon from "@mui/icons-material/ShowChartRounded";
-import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
@@ -29,9 +28,9 @@ import { ChatWidget } from "./components/ChatWidget.tsx";
 import { Resumo } from "./tabs/Resumo.tsx";
 import { Gastos } from "./tabs/Gastos.tsx";
 import { ProximoMes } from "./tabs/ProximoMes.tsx";
-import { Previsao } from "./tabs/Previsao.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
 import { Insights } from "./tabs/Insights.tsx";
+import IaScreen from "./tabs/IaScreen.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
 import { createAppTheme, type AppColorMode } from "./theme.ts";
@@ -149,9 +148,9 @@ export function App() {
     selectedMonth ? <Resumo month={selectedMonth} digest={digest} /> : null,
     selectedMonth ? <Gastos month={selectedMonth} /> : null,
     <ProximoMes />,
-    <Previsao />,
     selectedMonth ? <Investimentos month={selectedMonth} /> : null,
     selectedMonth ? <Insights month={selectedMonth} digest={digest} /> : null,
+    <IaScreen />,
   ];
 
   return (
@@ -249,9 +248,9 @@ export function App() {
             <BottomNavigationAction label="Resumo" icon={<HomeRoundedIcon />} />
             <BottomNavigationAction label="Gastos" icon={<ReceiptLongRoundedIcon />} />
             <BottomNavigationAction label="Próx. Mês" icon={<CalendarMonthRoundedIcon />} />
-            <BottomNavigationAction label="Previsão" icon={<TrendingUpRoundedIcon />} />
             <BottomNavigationAction label="Investimentos" icon={<ShowChartRoundedIcon />} />
             <BottomNavigationAction label="Insights" icon={<AutoAwesomeRoundedIcon />} />
+            <BottomNavigationAction label="IA" icon={<AutoAwesomeRoundedIcon />} />
           </BottomNavigation>
         </Paper>
       </Box>
