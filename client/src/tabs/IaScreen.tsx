@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Box } from "@mui/material";
 import { Previsao } from "./Previsao.tsx";
-import TreinarDiario from "../components/TreinarDiario.tsx";
 import DailyInsightsNavigator from "../components/DailyInsightsNavigator.tsx";
 
-const SUB_TABS = ["Insights", "Previsões", "Treinar"];
+const SUB_TABS = ["Insights", "Previsões"];
 
 export default function IaScreen() {
   const [activeSubTab, setActiveSubTab] = useState(0);
@@ -38,7 +37,6 @@ export default function IaScreen() {
 
       {activeSubTab === 0 && <DailyInsightsNavigator />}
       {activeSubTab === 1 && <Previsao />}
-      {activeSubTab === 2 && <TreinarDiario />}
     </Box>
   );
 }

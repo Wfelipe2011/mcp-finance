@@ -17,11 +17,6 @@ import type {
   ChatRequest,
   ChatResponse,
   DailyInsight,
-  ForecastDeviation,
-  FeedbackItem,
-  FeedbackResponse,
-  ModelVersion,
-  DailyTestResult,
   CategoryExclusion,
   MessagesRange,
 } from "./types.ts";
@@ -185,86 +180,6 @@ export async function fetchDailyInsight(): Promise<DailyInsight | null> {
   return res.json() as Promise<DailyInsight>;
 }
 
-export function fetchDeviations(year: number, month: number): Promise<ForecastDeviation[]> {
-  return get<ForecastDeviation[]>(`/api/forecast/feedback/deviations?year=${year}&month=${month}`);
-}
-
-export async function submitFeedback(items: FeedbackItem[]): Promise<FeedbackResponse> {
-  const res = await fetch("/api/forecast/feedback", {
-    method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify(items),
-  });
-  if (res.status === 401) return handleUnauthorized();
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error ?? res.statusText);
-  }
-  return res.json() as Promise<FeedbackResponse>;
-}
-
-export async function requestRetrain(): Promise<void> {
-  const res = await fetch("/api/forecast/feedback/retrain", {
-    method: "POST",
-    headers: authHeaders(),
-  });
-  if (res.status === 401) return handleUnauthorized();
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error ?? res.statusText);
-  }
-}
-
-// ── ml-daily-trainer API ────────────────────────────────
-export async function fetchModelVersions(): Promise<ModelVersion[]> {
-  const rows = await get<ModelVersion[]>("/api/forecast/daily/model-versions");
-  return rows.map(r => ({
-    ...r,
-    mae: r.mae != null ? Number(r.mae) : null,
-    mape: r.mape != null ? Number(r.mape) : null,
-    accuracy_pct: r.accuracy_pct != null ? Number(r.accuracy_pct) : null,
-    file_size_bytes: r.file_size_bytes != null ? Number(r.file_size_bytes) : null,
-    num_train: r.num_train != null ? Number(r.num_train) : null,
-    num_test: r.num_test != null ? Number(r.num_test) : null,
-  }));
-}
-
-export async function fetchTestResults(versionName: string): Promise<DailyTestResult[]> {
-  const rows = await get<DailyTestResult[]>(`/api/forecast/daily/test-results?version=${encodeURIComponent(versionName)}`);
-  return rows.map(r => ({
-    ...r,
-    predicted_amount: Number(r.predicted_amount),
-    actual_amount: Number(r.actual_amount),
-    deviation_pct: Number(r.deviation_pct),
-  }));
-}
-
-export async function activateModelVersion(versionName: string): Promise<void> {
-  const res = await fetch("/api/forecast/daily/activate", {
-    method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ version_name: versionName }),
-  });
-  if (res.status === 401) return handleUnauthorized();
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error ?? res.statusText);
-  }
-}
-
-export async function deleteModelFile(versionName: string): Promise<void> {
-  const res = await fetch("/api/forecast/daily/model-file", {
-    method: "DELETE",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ version_name: versionName }),
-  });
-  if (res.status === 401) return handleUnauthorized();
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error ?? res.statusText);
-  }
-}
-
 export function fetchCategoryExclusions(): Promise<CategoryExclusion[]> {
   return get<CategoryExclusion[]>("/api/forecast/daily/category-exclusions");
 }
@@ -327,17 +242,4 @@ export async function regenerateDailyInsight(): Promise<DailyInsight> {
     throw Object.assign(new Error((body as { error?: string }).error ?? res.statusText), { status: res.status });
   }
   return res.json() as Promise<DailyInsight>;
-}
-
-export async function requestDailyTrain(): Promise<{ version_name: string; status: string }> {
-  const res = await fetch("/api/forecast/daily/train", {
-    method: "POST",
-    headers: authHeaders(),
-  });
-  if (res.status === 401) return handleUnauthorized();
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((body as { error?: string }).error ?? res.statusText);
-  }
-  return res.json();
 }

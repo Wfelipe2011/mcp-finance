@@ -86,12 +86,7 @@ export interface ForecastJob {
   worker_id: string | null;
 }
 
-export interface MlTrainingJob {
-  id: number;
-  tenant_id: string;
-  status: string;
-  attempts: number;
-}
+
 
 export interface SimpleQueueStats {
   pending: number;
@@ -243,22 +238,7 @@ export interface DailyPrediction {
   model_version: string;
 }
 
-export interface ForecastDeviation {
-  prediction_id: number;
-  category_pt: string;
-  group_pt: string;
-  predicted_amount: number;
-  actual_amount: number;
-  deviation_pct: number;
-  user_rating: string | null;
-  correction_tag: string | null;
-}
 
-export interface FeedbackSaveItem {
-  prediction_id: number;
-  rating: string;
-  correction_tag?: string | null;
-}
 
 export interface ForecastRepository {
   getPredictionsByGroup(): Promise<PredictionByGroup[]>;
@@ -337,20 +317,6 @@ export class BunPgAdapter {
     markError(jobId: number, msg: string): Promise<void>;
     releaseStuck(): Promise<void>;
     getQueueStats(): Promise<SimpleQueueStats>;
-  };
-  readonly ml_training_jobs: {
-    enqueue(tenants: { id: string }[]): Promise<number>;
-    nextJob(): Promise<MlTrainingJob | null>;
-    markDone(jobId: number, mae: number, mape: number): Promise<void>;
-    markError(jobId: number, msg: string): Promise<void>;
-    releaseStuck(): Promise<void>;
-    getQueueStats(): Promise<SimpleQueueStats>;
-  };
-  readonly feedback: {
-    getDeviations(year: number, month: number): Promise<ForecastDeviation[]>;
-    saveFeedback(items: FeedbackSaveItem[]): Promise<number>;
-    getFeedbackSummary(tenantId: string): Promise<{ count: number }>;
-    enqueueRetrain(tenantId: string): Promise<void>;
   };
 
   constructor(private readonly tenantId?: string, externalSql?: SQL) {
@@ -1127,24 +1093,38 @@ export class BunPgAdapter {
 
       async getDailyPrediction(date: string): Promise<DailyPrediction[]> {
         if (!tid) throw new Error("getDailyPrediction requires tenantId");
-        const rows = await sql<{ prediction_date: string; category_pt: string; group_pt: string; predicted_amount: string; lower_bound: string; upper_bound: string; probability: string; model_version: string }[]>`
-          SELECT prediction_date::text, category_pt, group_pt,
-                 predicted_amount, lower_bound, upper_bound, probability, model_version
-          FROM forecast_daily_predictions
+        const d = new Date(date);
+        const dayOfWeek = d.getUTCDay();
+        const dayOfMonth = d.getUTCDate();
+        const rows = await sql<{ category_pt: string; group_pt: string; avg_amount: string; std_amount: string | null; occurrences_6m: string; max_occurrences_6m: string }[]>`
+          SELECT
+            category_pt,
+            group_pt,
+            avg_amount,
+            std_amount,
+            occurrences_6m,
+            MAX(occurrences_6m) OVER (PARTITION BY tenant_id) AS max_occurrences_6m
+          FROM daily_habit_signals
           WHERE tenant_id = ${tid}::uuid
-            AND prediction_date = ${date}::date
-          ORDER BY probability DESC
+            AND (day_of_week = ${dayOfWeek} OR day_of_month = ${dayOfMonth})
+          ORDER BY occurrences_6m DESC
         `;
-        return rows.map(r => ({
-          prediction_date: r.prediction_date,
-          category_pt: r.category_pt,
-          group_pt: r.group_pt,
-          predicted_amount: Number(r.predicted_amount),
-          lower_bound: Number(r.lower_bound),
-          upper_bound: Number(r.upper_bound),
-          probability: Number(r.probability),
-          model_version: r.model_version,
-        }));
+        return rows.map(r => {
+          const avg = Number(r.avg_amount);
+          const std = r.std_amount !== null ? Number(r.std_amount) : 0;
+          const occ6m = Number(r.occurrences_6m);
+          const maxOcc6m = Number(r.max_occurrences_6m);
+          return {
+            prediction_date: date,
+            category_pt: r.category_pt,
+            group_pt: r.group_pt,
+            predicted_amount: avg,
+            lower_bound: Math.max(0, avg - std),
+            upper_bound: avg + std,
+            probability: maxOcc6m > 0 ? occ6m / maxOcc6m : 0,
+            model_version: 'sql-view',
+          };
+        });
       },
 
       async saveDailyInsightMessage(
@@ -1616,209 +1596,6 @@ export class BunPgAdapter {
       },
     };
 
-    // ── ml_training_jobs ──────────────────────────────────────────────────────
-    this.ml_training_jobs = {
-      async enqueue(tenants) {
-        let inserted = 0;
-        for (const t of tenants) {
-          const rows = await sql`
-            INSERT INTO ml_training_jobs (tenant_id) VALUES (${t.id}::uuid) RETURNING id
-          `;
-          inserted += rows.length;
-        }
-        return inserted;
-      },
-
-      async nextJob() {
-        const rows = await sql<MlTrainingJob[]>`
-          WITH next AS (
-            SELECT id, tenant_id
-            FROM ml_training_jobs
-            WHERE status = 'pending'
-            ORDER BY created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-          UPDATE ml_training_jobs SET
-            status = 'running',
-            started_at = NOW(),
-            attempts = attempts + 1
-          FROM next
-          WHERE ml_training_jobs.id = next.id
-          RETURNING ml_training_jobs.id, ml_training_jobs.tenant_id,
-                    ml_training_jobs.status, ml_training_jobs.attempts
-        `;
-        return rows[0] ?? null;
-      },
-
-      async markDone(jobId, mae, mape) {
-        await sql`
-          UPDATE ml_training_jobs SET status = 'done', finished_at = NOW(),
-            mae = ${mae}, mape = ${mape}
-          WHERE id = ${jobId}
-        `;
-      },
-
-      async markError(jobId, msg) {
-        await sql`
-          UPDATE ml_training_jobs SET
-            error_msg = ${msg},
-            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
-            started_at = NULL
-          WHERE id = ${jobId}
-        `;
-      },
-
-      async releaseStuck() {
-        await sql`
-          UPDATE ml_training_jobs SET status = 'pending', started_at = NULL
-          WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
-        `;
-      },
-
-      async getQueueStats() {
-        const rows = await sql<{ status: string; cnt: string }[]>`
-          SELECT status, COUNT(*) AS cnt FROM ml_training_jobs GROUP BY status
-        `;
-        const c: Record<string, number> = {};
-        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
-        return {
-          pending: c['pending'] ?? 0,
-          running: c['running'] ?? 0,
-          done:    c['done']    ?? 0,
-          error:   c['error']   ?? 0,
-        };
-      },
-    };
-
-    // ── feedback ──────────────────────────────────────────────────────────────
-    this.feedback = {
-      async getDeviations(year: number, month: number): Promise<ForecastDeviation[]> {
-        if (!tid) throw new Error("getDeviations requires tenantId");
-        const rows = await sql.begin(async (tx) => {
-          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
-          return tx<{
-            prediction_id: string;
-            category_pt: string;
-            group_pt: string;
-            predicted_amount: string;
-            actual_amount: string;
-            deviation_pct: string;
-            user_rating: string | null;
-            correction_tag: string | null;
-          }[]>`
-            SELECT
-              fp.id          AS prediction_id,
-              fp.category_pt,
-              fp.group_pt,
-              fp.predicted_amount,
-              COALESCE(
-                (SELECT SUM(ABS(te.amount))
-                 FROM transactions_enriched te
-                 JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
-                 WHERE tm.tenant_id = ${tid}::uuid
-                   AND te.amount < 0
-                   AND te.category_pt = fp.category_pt
-                   AND EXTRACT(YEAR FROM te.date::date) = ${year}
-                   AND EXTRACT(MONTH FROM te.date::date) = ${month}
-                ), 0
-              ) AS actual_amount,
-              CASE
-                WHEN fp.predicted_amount = 0 THEN 0
-                ELSE ROUND(
-                  (COALESCE(
-                    (SELECT SUM(ABS(te.amount))
-                     FROM transactions_enriched te
-                     JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
-                     WHERE tm.tenant_id = ${tid}::uuid
-                       AND te.amount < 0
-                       AND te.category_pt = fp.category_pt
-                       AND EXTRACT(YEAR FROM te.date::date) = ${year}
-                       AND EXTRACT(MONTH FROM te.date::date) = ${month}
-                    ), 0
-                  ) - fp.predicted_amount) / fp.predicted_amount * 100, 2
-                )
-              END AS deviation_pct,
-              fuf.rating    AS user_rating,
-              fuf.correction_tag
-            FROM forecast_predictions fp
-            LEFT JOIN forecast_user_feedback fuf ON fuf.prediction_id = fp.id
-            WHERE fp.tenant_id = ${tid}::uuid
-              AND fp.target_year = ${year}
-              AND fp.target_month = ${month}
-            ORDER BY ABS(
-              CASE
-                WHEN fp.predicted_amount = 0 THEN 0
-                ELSE ROUND(
-                  (COALESCE(
-                    (SELECT SUM(ABS(te.amount))
-                     FROM transactions_enriched te
-                     JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
-                     WHERE tm.tenant_id = ${tid}::uuid
-                       AND te.amount < 0
-                       AND te.category_pt = fp.category_pt
-                       AND EXTRACT(YEAR FROM te.date::date) = ${year}
-                       AND EXTRACT(MONTH FROM te.date::date) = ${month}
-                    ), 0
-                  ) - fp.predicted_amount) / fp.predicted_amount * 100, 2
-                )
-              END
-            ) DESC
-          `;
-        });
-        return rows.map(r => ({
-          prediction_id: Number(r.prediction_id),
-          category_pt: r.category_pt,
-          group_pt: r.group_pt,
-          predicted_amount: Number(r.predicted_amount),
-          actual_amount: Number(r.actual_amount),
-          deviation_pct: Number(r.deviation_pct),
-          user_rating: r.user_rating,
-          correction_tag: r.correction_tag,
-        }));
-      },
-
-      async saveFeedback(items: FeedbackSaveItem[]): Promise<number> {
-        if (!tid) throw new Error("saveFeedback requires tenantId");
-        if (items.length === 0) return 0;
-        let saved = 0;
-        await sql.begin(async (tx) => {
-          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
-          for (const item of items) {
-            await tx`
-              INSERT INTO forecast_user_feedback (tenant_id, prediction_id, rating, correction_tag)
-              VALUES (${tid}::uuid, ${item.prediction_id}, ${item.rating}, ${item.correction_tag ?? null})
-              ON CONFLICT (tenant_id, prediction_id) DO UPDATE SET
-                rating         = EXCLUDED.rating,
-                correction_tag = EXCLUDED.correction_tag
-            `;
-            saved++;
-          }
-        });
-        return saved;
-      },
-
-      async getFeedbackSummary(tenantId: string): Promise<{ count: number }> {
-        const rows = await sql<[{ count: string }]>`
-          SELECT COUNT(*) AS count FROM forecast_user_feedback WHERE tenant_id = ${tenantId}::uuid
-        `;
-        return { count: parseInt(rows[0]?.count ?? "0", 10) };
-      },
-
-      async enqueueRetrain(tenantId: string): Promise<void> {
-        try {
-          await sql`
-            INSERT INTO ml_training_jobs (tenant_id, trigger)
-            VALUES (${tenantId}::uuid, 'user_feedback')
-          `;
-        } catch {
-          // Fallback if trigger column doesn't exist
-          await sql`
-            INSERT INTO ml_training_jobs (tenant_id) VALUES (${tenantId}::uuid)
-          `;
-        }
-      },
-    };
   }
 
   // ── web dashboard queries ─────────────────────────────────────────────────

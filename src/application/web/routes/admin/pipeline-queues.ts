@@ -15,7 +15,7 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
 
   let bodyMonth: { year: number; month: number } | null = null;
   try {
-    const body = await req.json();
+    const body = await req.json() as { month?: unknown };
     if (typeof body?.month === "string" && /^\d{4}-\d{2}$/.test(body.month)) {
       const [y, m] = body.month.split("-").map(Number);
       bodyMonth = { year: y!, month: m! };
@@ -107,30 +107,6 @@ export async function handleForecastQueueStats(req: Request, sql: SQL): Promise<
 
   const db = new BunPgAdapter(undefined, sql);
   const stats = await db.forecast_jobs.getQueueStats();
-  return jsonResponse(stats);
-}
-
-// ── ML Training Queue ──────────────────────────────────────────────────────
-
-export async function handleMlEnqueue(req: Request, sql: SQL): Promise<Response> {
-  const auth = await requireSuperAdmin(req);
-  if (!auth.valid) return errorResponse("Forbidden", auth.status);
-
-  const db = new BunPgAdapter(undefined, sql);
-  const tenantIds = await db.getActiveTenantsIds();
-
-  const tenants = tenantIds.map((id) => ({ id }));
-  const inserted = tenants.length > 0 ? await db.ml_training_jobs.enqueue(tenants) : 0;
-
-  return jsonResponse({ enqueued: inserted });
-}
-
-export async function handleMlQueueStats(req: Request, sql: SQL): Promise<Response> {
-  const auth = await requireSuperAdmin(req);
-  if (!auth.valid) return errorResponse("Forbidden", auth.status);
-
-  const db = new BunPgAdapter(undefined, sql);
-  const stats = await db.ml_training_jobs.getQueueStats();
   return jsonResponse(stats);
 }
 

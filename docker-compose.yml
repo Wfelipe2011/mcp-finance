@@ -99,34 +99,6 @@ services:
         condition: service_healthy
     restart: always
 
-  ml-trainer:
-    build:
-      context: .
-      dockerfile: Dockerfile.ml-trainer
-    environment:
-      ML_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      CHOKIDAR_USEPOLLING: 1
-      CHOKIDAR_INTERVAL: 10000
-      TIMEZONE: America/Sao_Paulo
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
-
-  ml-daily-trainer:
-    build:
-      context: .
-      dockerfile: Dockerfile.ml-daily
-    volumes:
-      - ml_models:/models
-    environment:
-      ML_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MODEL_STORAGE_PATH: /models
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   forecast-cron:
     build: .
     command: bun run forecast-cron
