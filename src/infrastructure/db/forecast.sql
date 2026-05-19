@@ -310,3 +310,72 @@ CREATE POLICY forecast_daily_exclusions_tenant_isolation
 
 GRANT ALL ON TABLE    forecast_daily_exclusions          TO finance;
 GRANT ALL ON SEQUENCE forecast_daily_exclusions_id_seq   TO finance;
+
+-- ────────────────────────────────────────────────
+-- forecast_monthly_projection (VIEW)
+-- Projeção mensal de gastos por (category_pt, group_pt) para os próximos 3 meses
+-- Usa regressão linear (REGR_SLOPE) sobre cube_gastos_mensais (últimos 6 meses)
+-- Grain: (target_year, target_month, category_pt, group_pt)
+-- change: forecast-sql-views
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW forecast_monthly_projection WITH (security_invoker = true) AS
+WITH historico AS (
+  SELECT
+    category_pt,
+    group_pt,
+    year,
+    month,
+    (year * 12 + month)::int AS month_epoch,
+    SUM(total_gastos)        AS total_gastos
+  FROM cube_gastos_mensais
+  WHERE (year * 12 + month) >= (
+    EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int - 5
+  )
+  GROUP BY category_pt, group_pt, year, month
+),
+tendencia AS (
+  SELECT
+    category_pt,
+    group_pt,
+    REGR_SLOPE(total_gastos::float8, month_epoch::float8)     AS slope,
+    REGR_INTERCEPT(total_gastos::float8, month_epoch::float8) AS intercept,
+    AVG(total_gastos)                                          AS avg_amount,
+    STDDEV(total_gastos)                                       AS std_amount
+  FROM historico
+  GROUP BY category_pt, group_pt
+  HAVING AVG(total_gastos) > 0
+),
+meses_futuros AS (
+  SELECT
+    EXTRACT(YEAR  FROM gs)::int                                     AS target_year,
+    EXTRACT(MONTH FROM gs)::int                                     AS target_month,
+    EXTRACT(YEAR  FROM gs)::int * 12 + EXTRACT(MONTH FROM gs)::int AS target_epoch
+  FROM generate_series(
+    DATE_TRUNC('month', NOW()) + INTERVAL '1 month',
+    DATE_TRUNC('month', NOW()) + INTERVAL '3 months',
+    INTERVAL '1 month'
+  ) gs
+)
+SELECT
+  t.category_pt,
+  t.group_pt,
+  f.target_year,
+  f.target_month,
+  GREATEST(
+    0,
+    COALESCE(t.slope, 0) * f.target_epoch + COALESCE(t.intercept, t.avg_amount)
+  )::numeric(18,2)                                                          AS predicted_amount,
+  GREATEST(
+    0,
+    COALESCE(t.slope, 0) * f.target_epoch + COALESCE(t.intercept, t.avg_amount)
+    - COALESCE(t.std_amount, 0)
+  )::numeric(18,2)                                                          AS lower_bound,
+  GREATEST(
+    0,
+    COALESCE(t.slope, 0) * f.target_epoch + COALESCE(t.intercept, t.avg_amount)
+    + COALESCE(t.std_amount, 0)
+  )::numeric(18,2)                                                          AS upper_bound
+FROM tendencia t
+CROSS JOIN meses_futuros f;
+
+GRANT SELECT ON forecast_monthly_projection TO finance;

@@ -849,20 +849,21 @@ export class BunPgAdapter {
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
-        const rows = await sql<PredictionByGroup[]>`
-          SELECT
-            group_pt,
-            target_year,
-            target_month,
-            SUM(predicted_amount) AS predicted_total
-          FROM forecast_predictions
-          WHERE tenant_id = ${tid}::uuid
-            AND status = 'ok'
-            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
-          GROUP BY group_pt, target_year, target_month
-          ORDER BY target_year, target_month, group_pt
-        `;
-        return rows.map((r) => ({ ...r, predicted_total: Number(r.predicted_total) }));
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<PredictionByGroup[]>`
+            SELECT
+              group_pt,
+              target_year,
+              target_month,
+              SUM(predicted_amount)::float AS predicted_total
+            FROM forecast_monthly_projection
+            WHERE (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+            GROUP BY group_pt, target_year, target_month
+            ORDER BY target_year, target_month, group_pt
+          `;
+          return rows.map((r) => ({ ...r, predicted_total: Number(r.predicted_total) }));
+        });
       },
 
       async getCurrentMonthSpendingByGroup(): Promise<SpendingByGroup[]> {
@@ -948,29 +949,30 @@ export class BunPgAdapter {
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
-        const rows = await sql<{ target_year: number; target_month: number; group_pt: string; predicted_total: number; lower_bound: number; upper_bound: number }[]>`
-          SELECT
-            target_year,
-            target_month,
-            group_pt,
-            SUM(predicted_amount)::float AS predicted_total,
-            SUM(lower_bound)::float      AS lower_bound,
-            SUM(upper_bound)::float      AS upper_bound
-          FROM forecast_predictions
-          WHERE tenant_id = ${tid}::uuid
-            AND status = 'ok'
-            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
-          GROUP BY target_year, target_month, group_pt
-          ORDER BY target_year, target_month, group_pt
-        `;
-        return rows.map((r) => ({
-          target_year: Number(r.target_year),
-          target_month: Number(r.target_month),
-          group_pt: r.group_pt,
-          predicted_total: Number(r.predicted_total),
-          lower_bound: Number(r.lower_bound),
-          upper_bound: Number(r.upper_bound),
-        }));
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<{ target_year: number; target_month: number; group_pt: string; predicted_total: number; lower_bound: number; upper_bound: number }[]>`
+            SELECT
+              target_year,
+              target_month,
+              group_pt,
+              SUM(predicted_amount)::float AS predicted_total,
+              SUM(lower_bound)::float      AS lower_bound,
+              SUM(upper_bound)::float      AS upper_bound
+            FROM forecast_monthly_projection
+            WHERE (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+            GROUP BY target_year, target_month, group_pt
+            ORDER BY target_year, target_month, group_pt
+          `;
+          return rows.map((r) => ({
+            target_year: Number(r.target_year),
+            target_month: Number(r.target_month),
+            group_pt: r.group_pt,
+            predicted_total: Number(r.predicted_total),
+            lower_bound: Number(r.lower_bound),
+            upper_bound: Number(r.upper_bound),
+          }));
+        });
       },
 
       async getRealSpendingByCategory(months: number): Promise<RealSpendingByCategory[]> {
@@ -1005,30 +1007,31 @@ export class BunPgAdapter {
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
-        const rows = await sql<{ target_year: number; target_month: number; category_pt: string; group_pt: string; predicted_amount: number; lower_bound: number; upper_bound: number }[]>`
-          SELECT
-            target_year,
-            target_month,
-            category_pt,
-            group_pt,
-            predicted_amount::float AS predicted_amount,
-            lower_bound::float      AS lower_bound,
-            upper_bound::float      AS upper_bound
-          FROM forecast_predictions
-          WHERE tenant_id = ${tid}::uuid
-            AND status = 'ok'
-            AND (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
-          ORDER BY target_year, target_month, group_pt, category_pt
-        `;
-        return rows.map((r) => ({
-          target_year: Number(r.target_year),
-          target_month: Number(r.target_month),
-          category_pt: r.category_pt,
-          group_pt: r.group_pt,
-          predicted_total: Number(r.predicted_amount),
-          lower_bound: Number(r.lower_bound),
-          upper_bound: Number(r.upper_bound),
-        }));
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<{ target_year: number; target_month: number; category_pt: string; group_pt: string; predicted_amount: number; lower_bound: number; upper_bound: number }[]>`
+            SELECT
+              target_year,
+              target_month,
+              category_pt,
+              group_pt,
+              predicted_amount::float AS predicted_amount,
+              lower_bound::float      AS lower_bound,
+              upper_bound::float      AS upper_bound
+            FROM forecast_monthly_projection
+            WHERE (target_year * 100 + target_month) > (${curYear} * 100 + ${curMonth})
+            ORDER BY target_year, target_month, group_pt, category_pt
+          `;
+          return rows.map((r) => ({
+            target_year: Number(r.target_year),
+            target_month: Number(r.target_month),
+            category_pt: r.category_pt,
+            group_pt: r.group_pt,
+            predicted_total: Number(r.predicted_amount),
+            lower_bound: Number(r.lower_bound),
+            upper_bound: Number(r.upper_bound),
+          }));
+        });
       },
 
       async getTodayMessage(): Promise<ForecastAiMessage | null> {
