@@ -142,16 +142,6 @@ Admin aparece apenas para role admin (troca IA ou adiciona item 6 — decidir em
 
 ---
 
-## Changes que dependem disto
-
-- **fix-digest-display** — afeta `Resumo.tsx` (cuidado com conflito)
-- **daily-ml-insights** — afeta `Previsao.tsx` e `IaScreen.tsx`
-- **ml-daily-trainer** — propõe a estrutura de `IaScreen` com sub-abas
-
-> Esta change de navegação deve ser feita **antes** ou **em paralelo cuidadoso** com as changes acima.
-
----
-
 ## Sugestão de escopo para a change
 
 **Uma change pequena e focada:**
