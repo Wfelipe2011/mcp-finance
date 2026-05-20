@@ -293,6 +293,26 @@ export interface ForecastRepository {
   saveDailyInsightMessage(date: string, message: string, contextJson: Record<string, unknown>, modelVersion: string, insightType: string): Promise<void>;
 }
 
+export interface CategoryRuleRow {
+  id: number;
+  tenant_id: string;
+  pattern: string;
+  category_id_override: string;
+  category_pt: string | null;
+  note: string | null;
+  priority: number;
+  match_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CategoryLabelRow {
+  category_id: string;
+  name_pt: string;
+  group_id: string;
+  group_name_pt: string;
+}
+
 function parseJsonbField<T>(value: unknown): T | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") {
@@ -367,6 +387,21 @@ export class BunPgAdapter {
     markError(jobId: number, msg: string): Promise<void>;
     releaseStuck(): Promise<void>;
     getQueueStats(): Promise<SimpleQueueStats>;
+  };
+  readonly categoryRules: {
+    list(): Promise<CategoryRuleRow[]>;
+    create(value: string, categoryId: string, note?: string): Promise<CategoryRuleRow>;
+    update(id: number, fields: Partial<{ value: string; category_id: string; note: string; is_active: boolean }>): Promise<CategoryRuleRow | null>;
+    remove(id: number): Promise<boolean>;
+    reorder(id: number, direction: 'up' | 'down'): Promise<void>;
+    applyToHistory(id: number): Promise<number>;
+  };
+  readonly categories: {
+    list(): Promise<CategoryLabelRow[]>;
+  };
+  readonly transactionCategory: {
+    override(transactionId: string, categoryId: string): Promise<boolean>;
+    countByDescriptionLike(text: string): Promise<number>;
   };
 
   constructor(private readonly tenantId?: string, externalSql?: SQL) {
@@ -705,7 +740,7 @@ export class BunPgAdapter {
                 co.id        AS override_id,
                 co.category_id_override
               FROM transactions_enriched tx
-              JOIN category_overrides co ON tx.description ILIKE co.pattern
+              JOIN category_overrides co ON tx.description ILIKE co.pattern AND co.is_active = true
               ORDER BY tx.id, co.priority ASC
             ) best
             JOIN category_overrides co ON co.id = best.override_id
@@ -720,7 +755,7 @@ export class BunPgAdapter {
             FROM (
               SELECT co2.id, COUNT(*) AS cnt
               FROM transactions_enriched te
-              JOIN category_overrides co2 ON te.description ILIKE co2.pattern
+              JOIN category_overrides co2 ON te.description ILIKE co2.pattern AND co2.is_active = true
               GROUP BY co2.id
             ) matched
             WHERE co.id = matched.id
@@ -1795,6 +1830,241 @@ export class BunPgAdapter {
       },
     };
 
+    // ── categoryRules ─────────────────────────────────────────────────────────
+    this.categoryRules = {
+      async list() {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<CategoryRuleRow[]>`
+            SELECT co.id, co.tenant_id, co.pattern,
+                   co.category_id_override, cl.name_pt AS category_pt,
+                   co.note, co.priority, co.match_count, co.is_active,
+                   co.created_at
+            FROM category_overrides co
+            LEFT JOIN category_labels cl ON cl.category_id = co.category_id_override
+            ORDER BY co.priority ASC, co.id ASC
+          `;
+        });
+      },
+
+      async create(value: string, categoryId: string, note?: string) {
+        if (!tid) throw new Error("categoryRules.create requer tenantId");
+        const pattern = `%${value}%`;
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const maxRows = await tx<[{ max_priority: number | null }]>`
+            SELECT MAX(priority) AS max_priority FROM category_overrides
+          `;
+          const nextPriority = (maxRows[0]?.max_priority ?? 0) + 10;
+          const rows = await tx<CategoryRuleRow[]>`
+            INSERT INTO category_overrides (tenant_id, pattern, category_id_override, note, priority)
+            VALUES (${tid}::uuid, ${pattern}, ${categoryId}, ${note ?? null}, ${nextPriority})
+            RETURNING id, tenant_id, pattern, category_id_override,
+                      null::text AS category_pt,
+                      note, priority, match_count, is_active, created_at
+          `;
+          const rule = rows[0]!;
+          // fetch category_pt
+          const clRows = await tx<[{ name_pt: string }]>`
+            SELECT name_pt FROM category_labels WHERE category_id = ${categoryId} LIMIT 1
+          `;
+          return { ...rule, category_pt: clRows[0]?.name_pt ?? null };
+        });
+      },
+
+      async update(id: number, fields: Partial<{ value: string; category_id: string; note: string; is_active: boolean }>) {
+        if (!tid) throw new Error("categoryRules.update requer tenantId");
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const existing = await tx<CategoryRuleRow[]>`
+            SELECT id FROM category_overrides WHERE id = ${id} LIMIT 1
+          `;
+          if (!existing[0]) return null;
+
+          if (fields.value !== undefined) {
+            await tx`UPDATE category_overrides SET pattern = ${`%${fields.value}%`} WHERE id = ${id}`;
+          }
+          if (fields.category_id !== undefined) {
+            await tx`UPDATE category_overrides SET category_id_override = ${fields.category_id} WHERE id = ${id}`;
+          }
+          if (fields.note !== undefined) {
+            await tx`UPDATE category_overrides SET note = ${fields.note} WHERE id = ${id}`;
+          }
+          if (fields.is_active !== undefined) {
+            await tx`UPDATE category_overrides SET is_active = ${fields.is_active} WHERE id = ${id}`;
+          }
+
+          const rows = await tx<CategoryRuleRow[]>`
+            SELECT co.id, co.tenant_id, co.pattern,
+                   co.category_id_override, cl.name_pt AS category_pt,
+                   co.note, co.priority, co.match_count, co.is_active, co.created_at
+            FROM category_overrides co
+            LEFT JOIN category_labels cl ON cl.category_id = co.category_id_override
+            WHERE co.id = ${id}
+          `;
+          return rows[0] ?? null;
+        });
+      },
+
+      async remove(id: number) {
+        if (!tid) throw new Error("categoryRules.remove requer tenantId");
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const result = await tx<[{ id: number }]>`
+            DELETE FROM category_overrides WHERE id = ${id}
+            RETURNING id
+          `;
+          return result.length > 0;
+        });
+      },
+
+      async reorder(id: number, direction: 'up' | 'down') {
+        if (!tid) throw new Error("categoryRules.reorder requer tenantId");
+        await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const current = await tx<[{ priority: number }]>`
+            SELECT priority FROM category_overrides WHERE id = ${id} LIMIT 1
+          `;
+          if (!current[0]) return;
+          const curPriority = current[0].priority;
+
+          const neighborRows = direction === 'up'
+            ? await tx<[{ id: number; priority: number }]>`
+                SELECT id, priority FROM category_overrides
+                WHERE priority < ${curPriority}
+                ORDER BY priority DESC LIMIT 1
+              `
+            : await tx<[{ id: number; priority: number }]>`
+                SELECT id, priority FROM category_overrides
+                WHERE priority > ${curPriority}
+                ORDER BY priority ASC LIMIT 1
+              `;
+          if (!neighborRows[0]) return;
+          const neighbor = neighborRows[0];
+
+          await tx`UPDATE category_overrides SET priority = ${neighbor.priority} WHERE id = ${id}`;
+          await tx`UPDATE category_overrides SET priority = ${curPriority} WHERE id = ${neighbor.id}`;
+        });
+      },
+
+      async applyToHistory(id: number): Promise<number> {
+        if (!tid) throw new Error("categoryRules.applyToHistory requer tenantId");
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const ruleRows = await tx<[{ pattern: string; category_id_override: string }]>`
+            SELECT pattern, category_id_override FROM category_overrides WHERE id = ${id} LIMIT 1
+          `;
+          if (!ruleRows[0]) return 0;
+          const { pattern, category_id_override } = ruleRows[0];
+
+          const clRows = await tx<[{ name_pt: string; group_id: string; group_name_pt: string }]>`
+            SELECT cl.name_pt, cl.category_id AS group_id, cg.name_pt AS group_name_pt
+            FROM category_labels cl
+            LEFT JOIN category_groups cg ON cg.group_id = LEFT(cl.category_id, 2)
+            WHERE cl.category_id = ${category_id_override} LIMIT 1
+          `;
+          if (!clRows[0]) return 0;
+          const { name_pt, group_id, group_name_pt } = clRows[0];
+          const groupId = group_id ? group_id.slice(0, 2) : null;
+
+          const result = await tx<[{ count: string }]>`
+            WITH updated AS (
+              UPDATE transactions_enriched
+              SET
+                category_id       = ${category_id_override},
+                category_pt       = ${name_pt},
+                category_group    = ${groupId},
+                category_group_pt = ${group_name_pt}
+              WHERE description ILIKE ${pattern}
+              RETURNING id
+            )
+            SELECT COUNT(*) AS count FROM updated
+          `;
+          const affected = parseInt(result[0]?.count ?? "0", 10);
+          if (affected > 0) {
+            await tx`
+              UPDATE category_overrides
+              SET match_count = match_count + ${affected}
+              WHERE id = ${id}
+            `;
+          }
+          return affected;
+        });
+      },
+    };
+
+    // ── categories ────────────────────────────────────────────────────────────
+    this.categories = {
+      async list() {
+        const rows = await sql<CategoryLabelRow[]>`
+          SELECT cl.category_id, cl.name_pt, cg.group_id, cg.name_pt AS group_name_pt
+          FROM category_labels cl
+          LEFT JOIN category_groups cg ON cg.group_id = LEFT(cl.category_id, 2)
+          ORDER BY cg.group_id ASC, cl.category_id ASC
+        `;
+        return rows;
+      },
+    };
+
+    // ── transactionCategory ───────────────────────────────────────────────────
+    this.transactionCategory = {
+      async override(transactionId: string, categoryId: string): Promise<boolean> {
+        if (!tid) throw new Error("transactionCategory.override requer tenantId");
+        return sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          // Check if transaction belongs to tenant
+          const check = await tx<[{ id: string }]>`
+            SELECT id FROM transactions_enriched WHERE id = ${transactionId} LIMIT 1
+          `;
+          if (!check[0]) return false;
+
+          const clRows = await tx<[{ name_pt: string }]>`
+            SELECT name_pt FROM category_labels WHERE category_id = ${categoryId} LIMIT 1
+          `;
+          if (!clRows[0]) return false;
+          const name_pt = clRows[0].name_pt;
+          const groupId = categoryId.slice(0, 2);
+          const cgRows = await tx<[{ name_pt: string }]>`
+            SELECT name_pt FROM category_groups WHERE group_id = ${groupId} LIMIT 1
+          `;
+          const group_name_pt = cgRows[0]?.name_pt ?? null;
+
+          // Update transactions_enriched
+          await tx`
+            UPDATE transactions_enriched
+            SET
+              category_id       = ${categoryId},
+              category_pt       = ${name_pt},
+              category_group    = ${groupId},
+              category_group_pt = ${group_name_pt}
+            WHERE id = ${transactionId}
+          `;
+
+          // Upsert transaction_category_overrides for auditability
+          await tx`
+            INSERT INTO transaction_category_overrides (transaction_id, tenant_id, category_id)
+            VALUES (${transactionId}, ${tid}::uuid, ${categoryId})
+            ON CONFLICT (transaction_id, tenant_id) DO UPDATE
+              SET category_id = EXCLUDED.category_id, overridden_at = NOW()
+          `;
+          return true;
+        });
+      },
+
+      async countByDescriptionLike(text: string): Promise<number> {
+        if (!tid) throw new Error("transactionCategory.countByDescriptionLike requer tenantId");
+        const rows = await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<[{ count: string }]>`
+            SELECT COUNT(*) AS count
+            FROM transactions_enriched
+            WHERE description ILIKE ${`%${text}%`}
+          `;
+        });
+        return parseInt(rows[0]?.count ?? "0", 10);
+      },
+    };
+
   }
 
   // ── web dashboard queries ─────────────────────────────────────────────────
@@ -2026,14 +2296,14 @@ export class BunPgAdapter {
     return this.withTenant(async (q) => {
       const items = await q<
         {
-          transaction_id: string; date_day: string; description: string;
+          transaction_id: string; category_id: string | null; date_day: string; description: string;
           category_pt: string | null; category_group_pt: string | null;
           amount_signed: string; transaction_kind: string; owner_normalized: string;
           merchant_name: string | null; is_recurring: boolean | null;
           anomaly_score: string | null; tags: string[] | null;
         }[]
       >`
-        SELECT t.transaction_id, t.date_day, t.description,
+        SELECT t.transaction_id, t.category_id, t.date_day, t.description,
                t.category_pt, t.category_group_pt,
                t.amount_signed, t.transaction_kind, t.owner_normalized,
                ai.merchant_name, ai.is_recurring, ai.anomaly_score, ai.tags

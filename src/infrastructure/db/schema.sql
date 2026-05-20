@@ -328,9 +328,24 @@ CREATE TABLE IF NOT EXISTS category_overrides (
   note                 TEXT,
   priority             INTEGER NOT NULL DEFAULT 100,
   match_count          INTEGER NOT NULL DEFAULT 0,
+  is_active            BOOLEAN NOT NULL DEFAULT true,
   created_at           TEXT NOT NULL DEFAULT (NOW()::TEXT),
   UNIQUE (tenant_id, pattern)
 );
+
+-- ────────────────────────────────────────────────
+-- transaction_category_overrides (sobrescritas pontuais por transação)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS transaction_category_overrides (
+  transaction_id  TEXT        NOT NULL REFERENCES transactions(id),
+  tenant_id       UUID        NOT NULL REFERENCES tenants(id),
+  category_id     TEXT        NOT NULL REFERENCES category_labels(category_id),
+  overridden_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (transaction_id, tenant_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tco_tenant
+  ON transaction_category_overrides (tenant_id);
 
 -- seed: category_groups
 INSERT INTO category_groups (group_id, name_pt) VALUES
@@ -545,6 +560,12 @@ CREATE POLICY tenant_isolation ON investment_transactions
 ALTER TABLE category_overrides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE category_overrides FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON category_overrides
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
+-- transaction_category_overrides
+ALTER TABLE transaction_category_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transaction_category_overrides FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON transaction_category_overrides
   USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
 
 -- transactions_enriched

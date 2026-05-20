@@ -27,6 +27,9 @@ import { handleChat } from "./routes/chat.ts";
 import { handleForecastDaily, handleForecastDailyRegenerate } from "./routes/forecast/daily.ts";
 import { handleDailyCategoryExclusionPathPost, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
 import { handleExportTransactions, handleExportSummary } from "./routes/export.ts";
+import { handleListRegras, handleCreateRegra, handleUpdateRegra, handleDeleteRegra, handleReordenarRegra, handleAplicarHistorico } from "./routes/regras.ts";
+import { handleListCategorias } from "./routes/categorias.ts";
+import { handlePatchCategoria, handleCountByDescriptionLike } from "./routes/transacoes.ts";
 
 export async function router(
   req: Request,
@@ -96,6 +99,16 @@ export async function router(
 
   if (path === "/api/export/transactions" && req.method === "GET") return handleExportTransactions(req, url, tenantId, sql);
   if (path === "/api/export/summary" && req.method === "GET") return handleExportSummary(req, url, tenantId, sql);
+
+  if (path === "/api/regras" && req.method === "GET") return handleListRegras(req, tenantId, sql);
+  if (path === "/api/regras" && req.method === "POST") return handleCreateRegra(req, tenantId, sql);
+  if (path.startsWith("/api/regras/") && path.endsWith("/prioridade") && req.method === "POST") return handleReordenarRegra(req, url, tenantId, sql);
+  if (path.startsWith("/api/regras/") && path.endsWith("/aplicar-historico") && req.method === "POST") return handleAplicarHistorico(req, url, tenantId, sql);
+  if (path.startsWith("/api/regras/") && req.method === "PATCH") return handleUpdateRegra(req, url, tenantId, sql);
+  if (path.startsWith("/api/regras/") && req.method === "DELETE") return handleDeleteRegra(req, url, tenantId, sql);
+  if (path === "/api/categorias" && req.method === "GET") return handleListCategorias(req, tenantId, sql);
+  if (path === "/api/transacoes/count" && req.method === "GET") return handleCountByDescriptionLike(req, url, tenantId, sql);
+  if (path.startsWith("/api/transacoes/") && path.endsWith("/categoria") && req.method === "PATCH") return handlePatchCategoria(req, url, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }

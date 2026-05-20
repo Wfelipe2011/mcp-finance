@@ -1,13 +1,17 @@
 import { useState, useEffect } from "react";
 import { fetchUsers, updateUserDisplayName } from "../api/client.ts";
 import type { User } from "../api/types.ts";
+import { RegrasTab } from "./RegrasTab.tsx";
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
+type TabId = "membros" | "regras";
+
 export function ConfigDialog({ open, onClose }: Props) {
+  const [activeTab, setActiveTab] = useState<TabId>("membros");
   const [users, setUsers] = useState<User[]>([]);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState<Record<number, "idle" | "loading" | "success" | "error">>({});
@@ -40,6 +44,11 @@ export function ConfigDialog({ open, onClose }: Props) {
 
   if (!open) return null;
 
+  const tabs: { id: TabId; label: string }[] = [
+    { id: "membros", label: "Membros" },
+    { id: "regras", label: "Regras" },
+  ];
+
   return (
     <div
       style={{
@@ -60,7 +69,7 @@ export function ConfigDialog({ open, onClose }: Props) {
         aria-label="Configurações"
         style={{
           width: "100%",
-          maxWidth: 480,
+          maxWidth: 520,
           backgroundColor: "var(--color-surface-card)",
           border: "1px solid var(--color-border-hairline)",
           borderRadius: "var(--radius-xl)",
@@ -95,50 +104,77 @@ export function ConfigDialog({ open, onClose }: Props) {
           </button>
         </div>
 
-        <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-body)", marginBottom: "var(--space-sm)" }}>
-          Membros
-        </p>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: "var(--space-md)", borderBottom: "1px solid var(--color-border-hairline)", paddingBottom: 8 }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "4px 12px",
+                fontSize: "0.8rem",
+                fontWeight: activeTab === tab.id ? 700 : 500,
+                color: activeTab === tab.id ? "var(--color-text-primary)" : "var(--color-text-body)",
+                background: activeTab === tab.id ? "var(--color-surface-elevated)" : "transparent",
+                border: "1px solid",
+                borderColor: activeTab === tab.id ? "var(--color-border-hairline)" : "transparent",
+                borderRadius: "var(--radius-md)",
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        {users.map((user) => (
-          <div key={user.id} style={{ marginBottom: "var(--space-sm)" }}>
-            <p style={{ fontSize: "0.75rem", color: "var(--color-text-body)", margin: 0, marginBottom: 4 }}>
-              {user.name}
-            </p>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="text"
-                className="input input-sm input-bordered flex-1"
-                placeholder="Nome exibido"
-                value={drafts[user.id] ?? user.display_name}
-                onChange={(e) => setDrafts((d) => ({ ...d, [user.id]: e.target.value }))}
-                style={{ backgroundColor: "var(--color-surface-elevated)", color: "var(--color-text-primary)" }}
-              />
-              <button
-                type="button"
-                onClick={() => void handleSave(user)}
-                disabled={saving[user.id] === "loading"}
-                title="Salvar"
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: "50%",
-                  border: "1px solid var(--color-border-hairline)",
-                  background: saving[user.id] === "success" ? "color-mix(in srgb, var(--color-trading-up) 20%, var(--color-surface-card))" : "var(--color-surface-card)",
-                  color: saving[user.id] === "error" ? "var(--color-trading-down)" : saving[user.id] === "success" ? "var(--color-trading-up)" : "var(--color-text-primary)",
-                  cursor: saving[user.id] === "loading" ? "not-allowed" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 14,
-                }}
-              >
-                {saving[user.id] === "loading" ? (
-                  <span className="loading loading-spinner" style={{ width: 14, height: 14 }} />
-                ) : "✓"}
-              </button>
-            </div>
-          </div>
-        ))}
+        {/* Tab content */}
+        {activeTab === "membros" && (
+          <>
+            {users.map((user) => (
+              <div key={user.id} style={{ marginBottom: "var(--space-sm)" }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-body)", margin: 0, marginBottom: 4 }}>
+                  {user.name}
+                </p>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="text"
+                    className="input input-sm input-bordered flex-1"
+                    placeholder="Nome exibido"
+                    value={drafts[user.id] ?? user.display_name}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [user.id]: e.target.value }))}
+                    style={{ backgroundColor: "var(--color-surface-elevated)", color: "var(--color-text-primary)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSave(user)}
+                    disabled={saving[user.id] === "loading"}
+                    title="Salvar"
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: "50%",
+                      border: "1px solid var(--color-border-hairline)",
+                      background: saving[user.id] === "success" ? "color-mix(in srgb, var(--color-trading-up) 20%, var(--color-surface-card))" : "var(--color-surface-card)",
+                      color: saving[user.id] === "error" ? "var(--color-trading-down)" : saving[user.id] === "success" ? "var(--color-trading-up)" : "var(--color-text-primary)",
+                      cursor: saving[user.id] === "loading" ? "not-allowed" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 14,
+                    }}
+                  >
+                    {saving[user.id] === "loading" ? (
+                      <span className="loading loading-spinner" style={{ width: 14, height: 14 }} />
+                    ) : "✓"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {activeTab === "regras" && <RegrasTab />}
       </div>
     </div>
   );

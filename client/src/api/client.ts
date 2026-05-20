@@ -22,6 +22,8 @@ import type {
   Goal,
   GoalType,
   BudgetExecution,
+  CategorizationRule,
+  CategoryLabel,
 } from "./types.ts";
 
 const BASE = "";
@@ -347,6 +349,105 @@ export function triggerDownload(url: string): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+// ── Regras de categorização ───────────────────────────────────────────────────
+
+export function fetchRegras(): Promise<CategorizationRule[]> {
+  return get<CategorizationRule[]>("/api/regras");
+}
+
+export async function createRegra(data: { value: string; category_id: string; note?: string }): Promise<CategorizationRule> {
+  const res = await fetch("/api/regras", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<CategorizationRule>;
+}
+
+export async function updateRegra(id: number, data: Partial<{ value: string; category_id: string; note: string; is_active: boolean }>): Promise<CategorizationRule> {
+  const res = await fetch(`/api/regras/${id}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<CategorizationRule>;
+}
+
+export async function deleteRegra(id: number): Promise<void> {
+  const res = await fetch(`/api/regras/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+}
+
+export async function reorderRegra(id: number, direction: 'up' | 'down'): Promise<CategorizationRule[]> {
+  const res = await fetch(`/api/regras/${id}/prioridade`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ direction }),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<CategorizationRule[]>;
+}
+
+export async function aplicarHistorico(id: number): Promise<{ affected: number }> {
+  const res = await fetch(`/api/regras/${id}/aplicar-historico`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<{ affected: number }>;
+}
+
+// ── Categorias ────────────────────────────────────────────────────────────────
+
+export function fetchCategorias(): Promise<CategoryLabel[]> {
+  return get<CategoryLabel[]>("/api/categorias");
+}
+
+// ── Override de categoria de transação ───────────────────────────────────────
+
+export async function patchCategoriaTransacao(transactionId: string, categoryId: string): Promise<void> {
+  const res = await fetch(`/api/transacoes/${transactionId}/categoria`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ category_id: categoryId }),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+}
+
+export function countTransacoesSimilares(descriptionLike: string): Promise<{ count: number }> {
+  const q = encodeURIComponent(descriptionLike);
+  return get<{ count: number }>(`/api/transacoes/count?description_like=${q}`);
 }
 
 /** Faz fetch do CSV, trata 422 e dispara download via blob. Retorna mensagem de erro ou null se OK. */

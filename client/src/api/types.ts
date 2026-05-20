@@ -18,6 +18,32 @@ export type GoalStatus = 'active' | 'achieved' | 'abandoned';
 
 export type BudgetStatus = 'ok' | 'warning' | 'exceeded';
 
+export interface CategorizationRule {
+  id: number;
+  tenant_id: string;
+  pattern: string;
+  category_id_override: string;
+  category_pt: string | null;
+  note: string | null;
+  priority: number;
+  match_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CategoryLabel {
+  category_id: string;
+  name_pt: string;
+  group_id: string;
+  group_name_pt: string;
+}
+
+export interface CategoryGroup {
+  group_id: string;
+  group_name_pt: string;
+}
+
+
 export interface BudgetExecution {
   id: number;
   tenant_id: string;
@@ -183,6 +209,7 @@ export interface Digest {
 
 export interface Transacao {
   transaction_id: string;
+  category_id: string | null;
   date_day: string;
   description: string;
   category_pt: string | null;
