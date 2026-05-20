@@ -161,10 +161,11 @@ ORDER BY year, month;
 -- ────────────────────────────────────────────────
 CREATE OR REPLACE VIEW cube_compromissos_ativos WITH (security_invoker = true) AS
 SELECT
-  regexp_replace(MIN(fp.description), 'PARC\d+/\d+', '', 'g') AS description,
+  fp.purchase_description                                      AS description,
   DATE_TRUNC('month', fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo')::DATE
                                                               AS purchase_day,
-  MIN(fp.amount)::NUMERIC(18,4)                               AS amount,
+  ((ARRAY_AGG(fp.amount ORDER BY fp.cc_installment_number DESC, fp.charge_date DESC))[1])::NUMERIC(18,4)
+                                                              AS amount,
   fp.account_id,
   a.name                                                      AS cartao,
   du.display_name                                             AS dono,
@@ -173,12 +174,15 @@ SELECT
   MAX(fp.cc_installment_number)                               AS installment_atual,
   MAX(fp.cc_total_installments)                               AS total_installments,
   ROUND(
-    (MAX(fp.cc_total_installments) - MAX(fp.cc_installment_number))::NUMERIC * MIN(fp.amount),
+    (MAX(fp.cc_total_installments) - MAX(fp.cc_installment_number))::NUMERIC
+      * ((ARRAY_AGG(fp.amount ORDER BY fp.cc_installment_number DESC, fp.charge_date DESC))[1])::NUMERIC,
     2
   )                                                           AS compromisso_restante
 FROM (
   SELECT
+    regexp_replace(te.description, 'PARC\d+/\d+', '', 'g') AS purchase_description,
     te.description,
+    te.date AS charge_date,
     te.cc_purchase_date,
     te.amount,
     te.account_id,
@@ -190,12 +194,18 @@ FROM (
   FROM transactions_enriched te
   WHERE te.cc_total_installments IS NOT NULL
     AND te.transaction_kind = 'EXPENSE'
+    -- Excluir parcelamentos/pagamentos/rotativos de fatura (mesma semântica de f_parcelas_futuras)
+    AND te.description NOT ILIKE '%FATURA PARCELA%'
+    AND te.description NOT ILIKE '%PAGAMENTO DE FATURA%'
+    AND te.description NOT ILIKE '%ROTATIVO PARCELAMENTO FATURA%'
+    AND COALESCE(te.category_pt, '') <> 'Pagamento de fatura'
 ) fp
 INNER JOIN accounts  a  ON a.id      = fp.account_id
 INNER JOIN tenant_members   du ON du.name   = fp.owner_normalized
 GROUP BY
   fp.account_id,
   DATE_TRUNC('month', fp.cc_purchase_date::TIMESTAMPTZ AT TIME ZONE 'America/Sao_Paulo'),
+  fp.purchase_description,
   fp.cc_total_installments,
   a.name,
   du.display_name

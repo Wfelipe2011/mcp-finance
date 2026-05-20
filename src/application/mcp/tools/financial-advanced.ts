@@ -379,9 +379,10 @@ export function registerFinancialAdvancedTools(server: McpServer, sql: SQL): voi
           `;
 
           const futureRows = await tx<{ total: string }[]>`
-            SELECT ROUND(COALESCE(SUM(amount), 0)::NUMERIC, 2)::text AS total
+            SELECT ROUND(COALESCE(SUM(installment_amount), 0)::NUMERIC, 2)::text AS total
             FROM f_parcelas_futuras
-            WHERE date_day >= ${cutoff}::date AND date_day < ${nextMonth}::date
+            WHERE projected_month >= DATE_TRUNC('month', ${cutoff}::date)::date
+              AND projected_month < DATE_TRUNC('month', ${nextMonth}::date)::date
           `;
 
           const incomeRows = await tx<{ receitas_reais: string }[]>`

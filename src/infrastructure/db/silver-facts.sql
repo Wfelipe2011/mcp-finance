@@ -101,28 +101,47 @@ INNER JOIN investments inv ON inv.id = it.investment_id;
 -- ────────────────────────────────────────────────
 -- f_parcelas_futuras
 -- Projeção temporal de parcelas futuras usando generate_series
--- Grain: (purchase_day, account_id, total_installments, amount, installment_seq)
+-- Grain: (purchase_day, account_id, total_installments, purchase_description, installment_seq)
 -- Para cada compra parcelada em aberto, gera uma linha por parcela ainda não registrada
 -- A data de vencimento é aproximada (~30 dias por parcela a partir da parcela atual)
 -- ────────────────────────────────────────────────
 CREATE OR REPLACE VIEW f_parcelas_futuras WITH (security_invoker = true) AS
-WITH last_installment AS (
-  -- Pega o último registro de cada compra parcelada (MAX installment_number por compra)
-  SELECT DISTINCT ON (purchase_day, account_id, total_installments, ROUND(amount::NUMERIC, 2))
+WITH parcelas_saneadas AS (
+  -- Exclui parcelamentos/pagamentos/rotativos de fatura (não representam compra parcelada válida)
+  SELECT
+    regexp_replace(description, 'PARC\d+/\d+', '', 'g') AS purchase_description,
     description,
+    date_day,
     purchase_day,
     account_id,
     owner_normalized,
     category_pt,
     category_group_pt,
-    installment_number                            AS last_installment_number,
+    installment_number,
     total_installments,
-    (total_installments - installment_number)     AS installments_remaining,
     amount
   FROM f_parcelas
-  WHERE installments_remaining > 0
-  ORDER BY purchase_day, account_id, total_installments, ROUND(amount::NUMERIC, 2),
-           installment_number DESC
+  WHERE description NOT ILIKE '%FATURA PARCELA%'
+    AND description NOT ILIKE '%PAGAMENTO DE FATURA%'
+    AND description NOT ILIKE '%ROTATIVO PARCELAMENTO FATURA%'
+    AND COALESCE(category_pt, '') <> 'Pagamento de fatura'
+),
+last_installment AS (
+  -- Pega o último registro de cada compra parcelada saneada antes de decidir se ainda há parcelas futuras
+  SELECT DISTINCT ON (purchase_day, account_id, total_installments, purchase_description)
+    purchase_description                         AS description,
+    purchase_day,
+    account_id,
+    owner_normalized,
+    category_pt,
+    category_group_pt,
+    installment_number                           AS last_installment_number,
+    total_installments,
+    (total_installments - installment_number)    AS installments_remaining,
+    amount
+  FROM parcelas_saneadas
+  ORDER BY purchase_day, account_id, total_installments, purchase_description,
+           installment_number DESC, date_day DESC
 )
 SELECT
   DATE_TRUNC('month',
@@ -138,4 +157,5 @@ SELECT
   total_installments,
   installments_remaining
 FROM last_installment
-CROSS JOIN LATERAL generate_series(1, installments_remaining) AS gs(n);
+CROSS JOIN LATERAL generate_series(1, installments_remaining) AS gs(n)
+WHERE installments_remaining > 0;
