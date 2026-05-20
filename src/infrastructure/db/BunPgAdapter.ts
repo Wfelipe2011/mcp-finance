@@ -2808,6 +2808,127 @@ export class BunPgAdapter {
     });
   }
 
+  // ── diagnóstico financeiro ─────────────────────────────────────────────────
+  async getFinancialDiagnosisData(): Promise<{
+    cashflowMonths: Array<{
+      year: number; month: number;
+      total_receitas: number; total_despesas: number; saldo_liquido: number;
+      total_emprestimos: number; total_receitas_operacionais: number;
+    }>;
+    runway: { runway_imediato_meses: number | null; runway_total_meses: number | null } | null;
+    spendingByGroup: Array<{ group_pt: string; total_gastos: number }>;
+    installmentCommitmentTotal: number;
+    outlierExpenses: Array<{ description: string; category_pt: string; group_pt: string; amount: number; date_day: string }>;
+  }> {
+    return this.withTenant(async (q) => {
+      const [monthRows, runwayImediatoRows, runwayTotalRows, groupRows, commitmentRows, outlierRows] = await Promise.all([
+        q<{
+          year: number; month: number;
+          total_receitas: string | null; total_despesas: string | null; saldo_liquido: string | null;
+          total_emprestimos: string | null; total_receitas_operacionais: string | null;
+        }[]>`
+          SELECT year, month,
+                 total_receitas, total_despesas, saldo_liquido,
+                 total_emprestimos, total_receitas_operacionais
+          FROM cube_cashflow_mensal
+          WHERE make_date(year, month, 1) >= date_trunc('month', current_date) - interval '12 months'
+            AND make_date(year, month, 1) < date_trunc('month', current_date)
+          ORDER BY year, month
+        `,
+        q<{ runway_imediato_meses: string | null }[]>`
+          SELECT runway_imediato_meses FROM kpi_runway_imediato LIMIT 1
+        `,
+        q<{ runway_total_meses: string | null }[]>`
+          SELECT runway_total_meses FROM kpi_runway_total LIMIT 1
+        `,
+        q<{ group_pt: string; total_gastos: string }[]>`
+          SELECT group_pt, SUM(total_gastos)::text AS total_gastos
+          FROM cube_gastos_grupo_mensal
+          WHERE make_date(year, month, 1) >= date_trunc('month', current_date) - interval '12 months'
+            AND make_date(year, month, 1) < date_trunc('month', current_date)
+          GROUP BY group_pt
+          ORDER BY SUM(total_gastos) DESC
+        `,
+        q<{ total: string }[]>`
+          SELECT COALESCE(SUM(compromisso_restante), 0)::text AS total
+          FROM cube_compromissos_ativos
+        `,
+        q<{ description: string; category_pt: string; group_pt: string; amount: string; date_day: string }[]>`
+          WITH expenses AS (
+            SELECT
+              transaction_id,
+              date_day,
+              description,
+              COALESCE(category_pt, 'Sem Categoria') AS category_pt,
+              COALESCE(category_group_pt, 'Sem Grupo') AS group_pt,
+              ABS(amount_signed)::NUMERIC AS amount
+            FROM f_fluxo_caixa
+            WHERE transaction_kind = 'EXPENSE'
+              AND date_day >= (date_trunc('month', current_date) - interval '12 months')::date
+              AND date_day < date_trunc('month', current_date)::date
+          ),
+          stats AS (
+            SELECT
+              category_pt,
+              AVG(amount) AS avg_amount,
+              STDDEV_POP(amount) AS stddev_amount,
+              COUNT(*) AS occurrences
+            FROM expenses
+            GROUP BY category_pt
+          )
+          SELECT
+            e.description,
+            e.category_pt,
+            e.group_pt,
+            e.amount::text AS amount,
+            e.date_day::text AS date_day
+          FROM expenses e
+          JOIN stats s ON s.category_pt = e.category_pt
+          WHERE s.occurrences >= 3
+            AND e.amount >= GREATEST(s.avg_amount * 2, s.avg_amount + COALESCE(s.stddev_amount, 0) * 2)
+          ORDER BY e.amount DESC
+          LIMIT 5
+        `,
+      ]);
+
+      const runwayIRow = runwayImediatoRows[0];
+      const runwayTRow = runwayTotalRows[0];
+      const runway = runwayIRow
+        ? {
+            runway_imediato_meses: runwayIRow.runway_imediato_meses !== null
+              ? Number(runwayIRow.runway_imediato_meses) : null,
+            runway_total_meses: runwayTRow?.runway_total_meses !== null && runwayTRow?.runway_total_meses !== undefined
+              ? Number(runwayTRow.runway_total_meses) : null,
+          }
+        : null;
+
+      return {
+        cashflowMonths: monthRows.map(r => ({
+          year: r.year,
+          month: r.month,
+          total_receitas: Number(r.total_receitas ?? 0),
+          total_despesas: Number(r.total_despesas ?? 0),
+          saldo_liquido: Number(r.saldo_liquido ?? 0),
+          total_emprestimos: Number(r.total_emprestimos ?? 0),
+          total_receitas_operacionais: Number(r.total_receitas_operacionais ?? 0),
+        })),
+        runway,
+        spendingByGroup: groupRows.map(r => ({
+          group_pt: r.group_pt,
+          total_gastos: Number(r.total_gastos),
+        })),
+        installmentCommitmentTotal: Number(commitmentRows[0]?.total ?? 0),
+        outlierExpenses: outlierRows.map(r => ({
+          description: r.description,
+          category_pt: r.category_pt,
+          group_pt: r.group_pt,
+          amount: Number(r.amount),
+          date_day: r.date_day,
+        })),
+      };
+    });
+  }
+
   async close(): Promise<void> {
     if (this.ownsSql) {
       await this.sql.close();

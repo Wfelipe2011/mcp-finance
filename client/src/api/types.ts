@@ -443,3 +443,61 @@ export interface SimulationCreatePayload extends SimulationCalculatePayload {
 export interface SimulationCalculateResult {
   months: SimulationMonth[];
 }
+
+// ── Diagnóstico Financeiro ────────────────────────────────────────────────────
+
+export type DiagnosisStatus = "healthy" | "attention" | "urgent";
+export type DetailDestination = "gastos" | "credito" | "metas" | "orcamento" | "resumo";
+export type BucketKey = "needs" | "wants" | "debt_goals" | "other";
+
+export interface DiagnosisBucket {
+  key: BucketKey;
+  label: string;
+  monthly_amount: number;
+  income_ratio: number;
+  target_ratio: number;
+  target_delta: number;
+}
+
+export interface DiagnosisAlert {
+  code: string;
+  severity: "low" | "medium" | "high";
+  message: string;
+}
+
+export interface DiagnosisAction {
+  title: string;
+  reason: string;
+  estimated_monthly_impact: number;
+  destination: DetailDestination;
+}
+
+export interface DiagnosisMetrics {
+  operational_income: number;
+  loan_inflows: number;
+  avg_monthly_income: number;
+  avg_monthly_income_operational: number;
+  avg_monthly_expenses: number;
+  avg_monthly_balance: number;
+  avg_monthly_loan_inflows: number;
+  negative_months: number;
+  negative_months_without_loans: number;
+  total_months_analyzed: number;
+  runway_imediato_meses: number | null;
+  runway_total_meses: number | null;
+  debt_ratio: number;
+  installment_commitment_total: number;
+  outlier_expense_count: number;
+  outlier_expense_total: number;
+}
+
+export interface FinancialDiagnosis {
+  status: DiagnosisStatus;
+  primary_cause: string;
+  metrics: DiagnosisMetrics;
+  buckets: DiagnosisBucket[];
+  alerts: DiagnosisAlert[];
+  recommended_actions: DiagnosisAction[];
+  detail_links: Record<DetailDestination, string>;
+  rule_version: string;
+}

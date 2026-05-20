@@ -32,6 +32,7 @@ import type {
   SimulationCalculateResult,
   SimulationCreatePayload,
   InsightToday,
+  FinancialDiagnosis,
 } from "./types.ts";
 
 const BASE = "";
@@ -756,4 +757,10 @@ export function reopenSimulation(id: string): Promise<Simulation> {
 
 export function fetchInsightToday(): Promise<InsightToday> {
   return get<InsightToday>("/api/insights/today");
+}
+
+// ── Diagnóstico Financeiro ────────────────────────────────────────────────────
+
+export function fetchFinancialDiagnosis(): Promise<FinancialDiagnosis> {
+  return get<FinancialDiagnosis>("/api/financial-diagnosis");
 }
