@@ -1,6 +1,6 @@
 # Análise do Perfil Financeiro — Wilson
 
-Data da análise: 2026-05-20
+Data da análise: 2026-05-19
 
 ## Objetivo
 
