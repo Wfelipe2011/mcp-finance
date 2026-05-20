@@ -169,7 +169,7 @@ export function App() {
   function renderScreen() {
     switch (activeScreen) {
       case "hoje":
-        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateToInsights={() => setActiveScreen("ia")} /> : null;
+        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateTo={(id) => setActiveScreen(id as ScreenId)} /> : null;
       case "plano":
         return <Plano onNavigateTo={(id) => setActiveScreen(id as ScreenId)} />;
       case "gastos":

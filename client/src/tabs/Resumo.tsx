@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { fetchCashflow, fetchPatrimonio, fetchRunway, fetchInsightToday } from "../api/client.ts";
-import type { CashflowMensal, Digest, InsightToday, Patrimonio, Runway } from "../api/types.ts";
-import { CardInsightDia } from "../components/CardInsightDia.tsx";
+import { fetchCashflow, fetchPatrimonio, fetchRunway, fetchInsightToday, fetchFinancialDiagnosis } from "../api/client.ts";
+import type { CashflowMensal, Digest, FinancialDiagnosis, InsightToday, Patrimonio, Runway } from "../api/types.ts";
+import { FinancialPriorityCard } from "../components/FinancialPriorityCard.tsx";
+import { TodaySummaryCards } from "../components/TodaySummaryCards.tsx";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { FlagPills } from "../components/FlagPills.tsx";
@@ -26,13 +27,34 @@ const captionStyle = {
 };
 const captionMutedStyle = { ...captionStyle, letterSpacing: 0.8, color: "var(--color-muted-strong)" };
 
-export function Resumo({ month, digest, onNavigateToInsights }: { month: string; digest: Digest | null; onNavigateToInsights?: () => void }) {
+export function Resumo({
+  month,
+  digest,
+  onNavigateTo,
+  onNavigateToInsights,
+}: {
+  month: string;
+  digest: Digest | null;
+  onNavigateTo?: (id: string) => void;
+  /** @deprecated usar onNavigateTo */
+  onNavigateToInsights?: () => void;
+}) {
   const [cashflow, setCashflow] = useState<CashflowMensal | null>(null);
   const [runway, setRunway] = useState<Runway | null>(null);
   const [patrimonio, setPatrimonio] = useState<Patrimonio | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [insight, setInsight] = useState<InsightToday | null>(null);
+  const [diagnosis, setDiagnosis] = useState<FinancialDiagnosis | null>(null);
+  const [diagnosisUnavailable, setDiagnosisUnavailable] = useState(false);
+
+  function navigateTo(id: string) {
+    if (onNavigateTo) {
+      onNavigateTo(id);
+    } else if (id === "ia" && onNavigateToInsights) {
+      onNavigateToInsights();
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -58,6 +80,14 @@ export function Resumo({ month, digest, onNavigateToInsights }: { month: string;
     fetchInsightToday().then(setInsight).catch(() => null);
   }, []);
 
+  useEffect(() => {
+    setDiagnosis(null);
+    setDiagnosisUnavailable(false);
+    fetchFinancialDiagnosis()
+      .then(setDiagnosis)
+      .catch(() => setDiagnosisUnavailable(true));
+  }, []);
+
   if (loading) return <LoadingCard title="Carregando Resumo..." />;
   if (error) return <ErrorCard message={error} />;
   if (!cashflow) return <ErrorCard message="Dados não disponíveis para este mês." />;
@@ -69,17 +99,19 @@ export function Resumo({ month, digest, onNavigateToInsights }: { month: string;
   const despesas = cashflow.total_despesas;
   const contasBanco = patrimonio?.items.filter((c) => c.tipo === "BANK" && (c.saldo_atual ?? 0) > 0) ?? [];
   const totalBanco = contasBanco.reduce((sum, c) => sum + (c.saldo_atual ?? 0), 0);
+  const diagnosisHasInsufficientHistory = diagnosis?.alerts.some((alert) => alert.code === "insufficient_history")
+    || (diagnosis?.metrics.total_months_analyzed ?? 0) > 0 && (diagnosis?.metrics.total_months_analyzed ?? 0) < 3;
+  const visibleDiagnosis = diagnosisHasInsufficientHistory ? null : diagnosis;
+  const showDiagnosisUnavailable = diagnosisUnavailable || diagnosisHasInsufficientHistory;
 
   return (
     <div className="mt-4 space-y-4">
-      {insight?.type != null && insight.text && (
-        <CardInsightDia
-          type={insight.type}
-          text={insight.text}
-          score={insight.score}
-          onVerDetalhes={() => onNavigateToInsights?.()}
-        />
-      )}
+      <FinancialPriorityCard
+        diagnosis={visibleDiagnosis}
+        insight={insight}
+        onNavigateTo={navigateTo}
+        diagnosisUnavailable={showDiagnosisUnavailable}
+      />
       <div style={cardStyle}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <p style={captionStyle}>Resultado mensal</p>
@@ -184,6 +216,8 @@ export function Resumo({ month, digest, onNavigateToInsights }: { month: string;
           ))}
         </div>
       )}
+
+      <TodaySummaryCards diagnosis={visibleDiagnosis} onNavigateTo={navigateTo} />
     </div>
   );
 }
