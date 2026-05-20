@@ -23,6 +23,7 @@ import {
   processarMensagemDoChat,
   type AgentUserRole,
 } from "./McpClient.ts";
+import type { FinancialContextResult } from "../chat/FinancialContextBuilder.ts";
 
 // ---------------------------------------------------------------------------
 // Ponto de entrada do orquestrador
@@ -31,11 +32,12 @@ import {
 /**
  * Orquestra uma mensagem de chat via agente LangChain com tools MCP.
  *
- * @param message  Mensagem do usuário (texto livre).
- * @param tenantId UUID do tenant autenticado (do JWT — nunca do body).
- * @param userId   ID do usuário autenticado (campo `sub` do JWT).
- * @param role     Role do usuário (`member` | `admin`).
- * @returns        Resposta do LLM em pt-BR.
+ * @param message           Mensagem do usuário (texto livre).
+ * @param tenantId          UUID do tenant autenticado (do JWT — nunca do body).
+ * @param userId            ID do usuário autenticado (campo `sub` do JWT).
+ * @param role              Role do usuário (`member` | `admin`).
+ * @param financialContext  Contexto financeiro carregado pelo backend (opcional — fallback se indisponível).
+ * @returns                 Resposta do LLM em pt-BR.
  */
 export async function orchestrateChat(
   message: string,
@@ -43,7 +45,13 @@ export async function orchestrateChat(
     tenantId,
     userId,
     role,
-  }: { tenantId: string; userId: string; role: AgentUserRole },
+    financialContext,
+  }: {
+    tenantId: string;
+    userId: string;
+    role: AgentUserRole;
+    financialContext?: FinancialContextResult;
+  },
 ): Promise<string> {
-  return processarMensagemDoChat(message, { tenantId, userId, role });
+  return processarMensagemDoChat(message, { tenantId, userId, role, financialContext });
 }

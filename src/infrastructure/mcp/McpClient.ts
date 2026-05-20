@@ -32,7 +32,7 @@
 
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { createAgent, createMiddleware, summarizationMiddleware } from "langchain";
@@ -359,6 +359,7 @@ async function getAgentSingleton({
  * @param tenantId           UUID do tenant autenticado (do JWT).
  * @param userId             ID do usuário autenticado (campo `sub` do JWT).
  * @param role               Role do usuário (`member` | `admin`).
+ * @param financialContext   Contexto financeiro carregado pelo backend (opcional).
  * @returns                  Resposta do LLM em pt-BR.
  */
 export async function processarMensagemDoChat(
@@ -367,16 +368,30 @@ export async function processarMensagemDoChat(
     tenantId,
     userId,
     role,
-  }: { tenantId: string; userId: string; role: AgentUserRole },
+    financialContext,
+  }: {
+    tenantId: string;
+    userId: string;
+    role: AgentUserRole;
+    financialContext?: { contextText: string; limited: boolean };
+  },
 ): Promise<string> {
   console.log("[Backend] Consultando o LLM...");
 
   const agent = await getAgentSingleton({ role });
   const threadId = `${tenantId}:${userId}`;
 
+  // Injeta contexto financeiro como SystemMessage antes da mensagem do usuário.
+  // O tenant_id autenticado é o único usado — qualquer valor na mensagem é ignorado.
+  const messages: (SystemMessage | HumanMessage)[] = [];
+  if (financialContext?.contextText) {
+    messages.push(new SystemMessage(financialContext.contextText));
+  }
+  messages.push(new HumanMessage(mensagemDoUsuario));
+
   const result = await agent.invoke(
     {
-      messages: [new HumanMessage(mensagemDoUsuario)],
+      messages,
       tenantId,
       userRole: role,
     },

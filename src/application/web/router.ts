@@ -91,7 +91,7 @@ export async function router(
   if (path === "/api/forecast/groups" && req.method === "GET") return handleForecastGroups(req, tenantId, sql);
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
-  if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId, userId, userRole);
+  if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId, userId, userRole, sql);
   if (path === "/api/forecast/daily" && req.method === "GET") return handleForecastDaily(req, tenantId, sql);
   if (path === "/api/forecast/daily/regenerate" && req.method === "POST") return handleForecastDailyRegenerate(req, tenantId, sql);
 

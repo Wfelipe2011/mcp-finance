@@ -1,3 +1,4 @@
+import type { SQL } from "bun";
 import { jsonResponse, errorResponse } from "../helpers.ts";
 import {
   orchestrateChat,
@@ -8,6 +9,7 @@ import {
   McpParseError,
   type AgentUserRole,
 } from "../../../infrastructure/mcp/McpClient.ts";
+import { buildFinancialContext } from "../../../infrastructure/chat/FinancialContextBuilder.ts";
 
 interface ChatRequestBody {
   message?: unknown;
@@ -20,13 +22,17 @@ interface ChatRequestBody {
  * Contrato da API: { message: string, history?: Array<{role, content}> } → { reply: string }
  *
  * O tenantId, userId e role são obtidos exclusivamente do JWT autenticado (parâmetros da função),
- * nunca do body da requisição.
+ * nunca do body da requisição. Qualquer tenant_id presente no body é ignorado.
+ *
+ * O diagnóstico financeiro é carregado com o tenant autenticado antes de chamar o orquestrador.
+ * Se o diagnóstico falhar, o chat continua com contexto limitado.
  */
 export async function handleChat(
   req: Request,
   tenantId: string,
   userId: string,
   role: AgentUserRole,
+  sql: SQL,
 ): Promise<Response> {
   let body: ChatRequestBody;
   try {
@@ -66,8 +72,12 @@ export async function handleChat(
   const message = body.message.trim();
   const startMs = Date.now();
 
+  // Carrega contexto financeiro com o tenant autenticado (nunca do body).
+  // Fallback silencioso: se falhar, chat continua com contexto limitado.
+  const financialContext = await buildFinancialContext(tenantId, sql);
+
   try {
-    const reply = await orchestrateChat(message, { tenantId, userId, role });
+    const reply = await orchestrateChat(message, { tenantId, userId, role, financialContext });
 
     console.log(`[chat] status=ok latencia=${Date.now() - startMs}ms`);
 

@@ -753,7 +753,7 @@ const CHAT_WELCOME: ChatMessage = {
   content: "Olá! Aqui você pode perguntar sobre seu plano financeiro, metas e próximos passos. Como posso te ajudar? 💬",
 };
 
-function PlanoChatPanel({ suggestedQuestions }: { suggestedQuestions: string[] }) {
+function PlanoChatPanel({ contextLimited, suggestedQuestions }: { contextLimited: boolean; suggestedQuestions: string[] }) {
   const [messages, setMessages] = useState<ChatMessage[]>([CHAT_WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -813,6 +813,20 @@ function PlanoChatPanel({ suggestedQuestions }: { suggestedQuestions: string[] }
         <span aria-hidden>💬</span>
         <p style={{ margin: 0, fontWeight: 700, color: "var(--color-text-primary)" }}>Conversa sobre o plano</p>
       </div>
+
+      {contextLimited && (
+        <div
+          style={{
+            padding: "var(--space-xs) var(--space-md)",
+            borderBottom: "1px solid var(--color-border-hairline)",
+            color: "var(--color-muted-strong)",
+            fontSize: "0.75rem",
+            lineHeight: 1.4,
+          }}
+        >
+          Diagnóstico indisponível agora; a conversa continua com contexto limitado.
+        </div>
+      )}
 
       {suggestedQuestions.length > 0 && (
         <div
@@ -1138,7 +1152,7 @@ export function Plano({ onNavigateTo }: { onNavigateTo: (id: string) => void }) 
         </EvidenceSection>
       </div>
 
-      <PlanoChatPanel suggestedQuestions={suggestedQuestions} />
+      <PlanoChatPanel contextLimited={error || !diagnosis} suggestedQuestions={suggestedQuestions} />
     </div>
   );
 }
