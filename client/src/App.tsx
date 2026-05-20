@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { MonthPicker } from "./components/MonthPicker.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { ConfigDialog } from "./components/ConfigDialog.tsx";
@@ -12,6 +12,10 @@ import AdminScreen from "./tabs/AdminScreen.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest, JwtPayload, UserRole } from "./api/types.ts";
 import type { AppColorMode } from "./theme.ts";
+
+const Credito = lazy(() =>
+  import("./tabs/Credito.tsx").then((module) => ({ default: module.Credito })),
+);
 
 function isTokenValid(token: string): boolean {
   try {
@@ -40,7 +44,7 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "admin";
+type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "admin";
 
 const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "resumo", label: "Resumo", icon: "🏠" },
@@ -48,6 +52,7 @@ const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
   { id: "investimentos", label: "Investimentos", icon: "📈" },
   { id: "metas", label: "Metas", icon: "🎯" },
+  { id: "credito", label: "Crédito", icon: "💳" },
   { id: "ia", label: "IA", icon: "✨" },
 ];
 
@@ -162,6 +167,12 @@ export function App() {
         return selectedMonth ? <Investimentos month={selectedMonth} /> : null;
       case "metas":
         return <Metas />;
+      case "credito":
+        return (
+          <Suspense fallback={<div className="loading loading-spinner m-4" />}>
+            <Credito />
+          </Suspense>
+        );
       case "ia":
         return <IaScreen />;
       case "admin":

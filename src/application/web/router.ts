@@ -7,7 +7,7 @@ import { handleListTenants, handleCreateTenant, handleToggleTenantStatus } from 
 import { handleDigestEnqueue, handleDigestQueueStats, handleEnrichEnqueue, handleForecastEnqueue, handleForecastQueueStats, handleDailyInsightEnqueue, handleDailyInsightQueueStats } from "./routes/admin/pipeline-queues.ts";
 import { handleCashflow, handleCashflowProjetado } from "./routes/cashflow.ts";
 import { handleGastos } from "./routes/gastos.ts";
-import { handleCompromissos } from "./routes/compromissos.ts";
+import { handleCompromissos, handleCompromissosCartoes, handleParcelasTimeline } from "./routes/compromissos.ts";
 import { handleRunway } from "./routes/runway.ts";
 import { handlePatrimonio } from "./routes/patrimonio.ts";
 import { handleInvestimentos } from "./routes/investimentos.ts";
@@ -76,6 +76,8 @@ export async function router(
   if (path === "/api/cashflow/projetado" && req.method === "GET") return handleCashflowProjetado(req, url, tenantId, sql);
   if (path === "/api/gastos" && req.method === "GET") return handleGastos(req, url, tenantId, sql);
   if (path === "/api/compromissos" && req.method === "GET") return handleCompromissos(req, url, tenantId, sql);
+  if (path === "/api/compromissos/cartoes" && req.method === "GET") return handleCompromissosCartoes(req, url, tenantId, sql);
+  if (path === "/api/compromissos/timeline" && req.method === "GET") return handleParcelasTimeline(req, url, tenantId, sql);
   if (path === "/api/runway" && req.method === "GET") return handleRunway(req, url, tenantId, sql);
   if (path === "/api/patrimonio" && req.method === "GET") return handlePatrimonio(req, url, tenantId, sql);
   if (path === "/api/investimentos" && req.method === "GET") return handleInvestimentos(req, url, tenantId, sql);

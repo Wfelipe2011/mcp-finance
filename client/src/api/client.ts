@@ -24,6 +24,8 @@ import type {
   BudgetExecution,
   CategorizationRule,
   CategoryLabel,
+  CartaoResumo,
+  ParcelaTimeline,
 } from "./types.ts";
 
 const BASE = "";
@@ -638,4 +640,12 @@ export async function adminEnqueueEnrich(tenantId?: string): Promise<void> {
 
 export function adminListWorkers(): Promise<AdminWorker[]> {
   return get<AdminWorker[]>("/api/admin/workers");
+}
+
+export function fetchCompromissosCartoes(): Promise<CartaoResumo[]> {
+  return get<CartaoResumo[]>("/api/compromissos/cartoes");
+}
+
+export function fetchParcelasTimeline(): Promise<ParcelaTimeline[]> {
+  return get<ParcelaTimeline[]>("/api/compromissos/timeline");
 }

@@ -131,6 +131,38 @@ export interface Compromisso {
   compromisso_restante: number;
 }
 
+export interface CompromissoResumo {
+  description: string;
+  purchase_day: string;
+  installment_atual: number;
+  total_installments: number;
+  amount: number;
+  compromisso_restante: number;
+  dono: string;
+  category_pt: string | null;
+}
+
+export interface CartaoResumo {
+  account_id: string;
+  cartao: string;
+  cc_credit_limit: number | null;
+  total_comprometido: number;
+  compromissos: CompromissoResumo[];
+}
+
+export interface ParcelaTimelineBreakdown {
+  description: string;
+  installment_amount: number;
+}
+
+export interface ParcelaTimeline {
+  mes_referencia: string;
+  account_id: string;
+  cartao: string;
+  total_parcelas_mes: number;
+  breakdown: ParcelaTimelineBreakdown[];
+}
+
 export interface CashflowProjetado {
   year: number;
   month: number;

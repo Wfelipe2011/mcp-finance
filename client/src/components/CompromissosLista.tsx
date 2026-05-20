@@ -25,6 +25,11 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
       </p>
       {displayed.map((c, i) => {
         const progress = Math.round((c.installment_atual / c.total_installments) * 100);
+        const detalhes = [
+          `${formatBRL(c.compromisso_restante)} restante`,
+          c.dono,
+          c.cartao?.trim() ? c.cartao : null,
+        ].filter(Boolean).join(" · ");
         return (
           <div
             key={i}
@@ -53,7 +58,7 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
               <div style={{ height: "100%", width: `${progress}%`, borderRadius: "inherit", backgroundColor: "var(--color-primary)" }} />
             </div>
             <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>
-              {formatBRL(c.compromisso_restante)} restante · {c.dono} · {c.cartao}
+              {detalhes}
             </p>
           </div>
         );

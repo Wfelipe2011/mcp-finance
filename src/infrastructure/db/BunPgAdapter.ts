@@ -313,6 +313,38 @@ export interface CategoryLabelRow {
   group_name_pt: string;
 }
 
+export interface CompromissoItem {
+  description: string;
+  purchase_day: string;
+  installment_atual: number;
+  total_installments: number;
+  amount: number;
+  compromisso_restante: number;
+  dono: string;
+  category_pt: string | null;
+}
+
+export interface CartaoResumo {
+  account_id: string;
+  cartao: string;
+  cc_credit_limit: number | null;
+  total_comprometido: number;
+  compromissos: CompromissoItem[];
+}
+
+export interface ParcelaTimelineBreakdown {
+  description: string;
+  installment_amount: number;
+}
+
+export interface ParcelaTimeline {
+  mes_referencia: string;
+  account_id: string;
+  cartao: string;
+  total_parcelas_mes: number;
+  breakdown: ParcelaTimelineBreakdown[];
+}
+
 function parseJsonbField<T>(value: unknown): T | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") {
@@ -2591,6 +2623,52 @@ export class BunPgAdapter {
         `;
       }
       return rows.map((r) => ({ ...r, total_gasto: Number(r.total_gasto) }));
+    });
+  }
+
+  async getParcelasAgrupadas(): Promise<CartaoResumo[]> {
+    return this.withTenant(async (q) => {
+      const rows = await q<{
+        account_id: string;
+        cartao: string;
+        cc_credit_limit: string | null;
+        total_comprometido: string;
+        compromissos: unknown;
+      }[]>`
+        SELECT account_id, cartao, cc_credit_limit, total_comprometido, compromissos
+        FROM cube_parcelas_cartao
+        ORDER BY total_comprometido DESC
+      `;
+      return rows.map(r => ({
+        account_id: r.account_id,
+        cartao: r.cartao,
+        cc_credit_limit: r.cc_credit_limit !== null ? Number(r.cc_credit_limit) : null,
+        total_comprometido: Number(r.total_comprometido),
+        compromissos: parseJsonbField<CompromissoItem[]>(r.compromissos) ?? [],
+      }));
+    });
+  }
+
+  async getParcelasTimeline(): Promise<ParcelaTimeline[]> {
+    return this.withTenant(async (q) => {
+      const rows = await q<{
+        mes_referencia: string;
+        account_id: string;
+        cartao: string;
+        total_parcelas_mes: string;
+        breakdown: unknown;
+      }[]>`
+        SELECT mes_referencia, account_id, cartao, total_parcelas_mes, breakdown
+        FROM cube_parcelas_por_mes
+        ORDER BY mes_referencia ASC, total_parcelas_mes DESC
+      `;
+      return rows.map(r => ({
+        mes_referencia: r.mes_referencia,
+        account_id: r.account_id,
+        cartao: r.cartao,
+        total_parcelas_mes: Number(r.total_parcelas_mes),
+        breakdown: parseJsonbField<ParcelaTimelineBreakdown[]>(r.breakdown) ?? [],
+      }));
     });
   }
 

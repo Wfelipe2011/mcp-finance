@@ -299,6 +299,62 @@ SELECT
   ROUND((sc.saldo_liquido + si.saldo_investimentos) / NULLIF(mg.media_saidas_90d, 0), 1) AS runway_total_meses
 FROM saldo_contas sc, saldo_investimentos si, media_gastos mg;
 
+-- ────────────────────────────────────────────────
+-- cube_parcelas_cartao
+-- Saldo devedor e compromissos ativos agrupados por cartão de crédito
+-- Grain: (account_id) — uma linha por cartão com lista JSON de compromissos
+-- Decisão D1: usa cube_compromissos_ativos como fonte (já filtrado e deduplicado)
+-- Decisão D2: cc_credit_limit nullable — exibir barra só quando disponível
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW cube_parcelas_cartao WITH (security_invoker = true) AS
+SELECT
+  ca.account_id,
+  ca.cartao,
+  a.cc_credit_limit,
+  ROUND(SUM(ca.compromisso_restante)::NUMERIC, 2) AS total_comprometido,
+  json_agg(
+    json_build_object(
+      'description',          ca.description,
+      'purchase_day',         ca.purchase_day,
+      'installment_atual',    ca.installment_atual,
+      'total_installments',   ca.total_installments,
+      'amount',               ca.amount,
+      'compromisso_restante', ca.compromisso_restante,
+      'dono',                 ca.dono,
+      'category_pt',          ca.category_pt
+    ) ORDER BY ca.compromisso_restante DESC
+  ) AS compromissos
+FROM cube_compromissos_ativos ca
+INNER JOIN accounts a ON a.id = ca.account_id
+GROUP BY ca.account_id, ca.cartao, a.cc_credit_limit
+ORDER BY total_comprometido DESC;
+
+-- ────────────────────────────────────────────────
+-- cube_parcelas_por_mes
+-- Timeline de parcelas futuras agrupadas por mês × cartão
+-- Grain: (projected_month, account_id) — uma linha por mês/cartão com breakdown JSON
+-- Decisão D3: parte de f_parcelas_futuras (lógica generate_series já feita)
+-- Filtro: somente os próximos 24 meses a partir do mês atual
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW cube_parcelas_por_mes WITH (security_invoker = true) AS
+SELECT
+  pf.projected_month                                              AS mes_referencia,
+  pf.account_id,
+  a.name                                                          AS cartao,
+  ROUND(SUM(pf.installment_amount)::NUMERIC, 2)                   AS total_parcelas_mes,
+  json_agg(
+    json_build_object(
+      'description',       pf.description,
+      'installment_amount', pf.installment_amount
+    ) ORDER BY pf.installment_amount DESC
+  )                                                               AS breakdown
+FROM f_parcelas_futuras pf
+INNER JOIN accounts a ON a.id = pf.account_id
+WHERE pf.projected_month >= DATE_TRUNC('month', CURRENT_DATE)
+  AND pf.projected_month < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '24 months'
+GROUP BY pf.projected_month, pf.account_id, a.name
+ORDER BY pf.projected_month, total_parcelas_mes DESC;
+
 -- Alias de compatibilidade: kpi_cash_runway aponta para kpi_runway_imediato
 CREATE OR REPLACE VIEW kpi_cash_runway WITH (security_invoker = true) AS
 SELECT

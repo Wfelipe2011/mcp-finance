@@ -7,3 +7,15 @@ export async function handleCompromissos(_req: Request, _url: URL, tenantId: str
   const data = await db.getCompromissosAtivos();
   return jsonResponse(data);
 }
+
+export async function handleCompromissosCartoes(_req: Request, _url: URL, tenantId: string, sql: SQL): Promise<Response> {
+  const db = new BunPgAdapter(tenantId, sql);
+  const data = await db.getParcelasAgrupadas();
+  return jsonResponse(data);
+}
+
+export async function handleParcelasTimeline(_req: Request, _url: URL, tenantId: string, sql: SQL): Promise<Response> {
+  const db = new BunPgAdapter(tenantId, sql);
+  const data = await db.getParcelasTimeline();
+  return jsonResponse(data);
+}
