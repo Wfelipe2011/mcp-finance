@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-05-20",
+  "description": "Contas de teste para cadastro e sync em ambiente local",
+  "accounts": [
+    {
+      "label": "Wilson",
+      "app_login": {
+        "email": "wfelipe2011@gmail.com",
+        "password": "661879",
+        "expected_role": "admin"
+      },
+      "pluggy": {
+        "email": "wfelipepluggy@gmail.com",
+        "password": "acrg qrqw cbvt omzn"
+      }
+    },
+    {
+      "label": "Joao",
+      "app_login": {
+        "email": "joaowictor756@gmail.com",
+        "password": "jwf123456",
+        "expected_role": "member"
+      },
+      "pluggy": {
+        "email": "hermes.jwf@gmail.com",
+        "password": "anya attf umti pbav"
+      }
+    }
+  ]
+}
