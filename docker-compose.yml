@@ -25,7 +25,7 @@ services:
     ports:
       - "4001:3001"
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
       TOKEN_URL: http://auth:3000/token
       AI_BASE_URL: ${AI_BASE_URL}
       AI_MODEL: ${AI_MODEL}
@@ -45,6 +45,8 @@ services:
         condition: service_healthy
       auth:
         condition: service_started
+      pgbouncer:
+        condition: service_started
     volumes:
       - ml_models:/models
     restart: unless-stopped
@@ -55,7 +57,7 @@ services:
     ports:
       - "3002:3002"
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
       TOKEN_URL: http://auth:3000/token
       MCP_PORT: "3002"
       MCP_HOST: 0.0.0.0
@@ -68,13 +70,15 @@ services:
         condition: service_healthy
       auth:
         condition: service_started
+      pgbouncer:
+        condition: service_started
     restart: unless-stopped
 
   supervisor:
     build: .
     command: bun run supervisor
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
       APP_SECRET: ${APP_SECRET}
       CHOKIDAR_USEPOLLING: 1
       CHOKIDAR_INTERVAL: 10000
@@ -82,13 +86,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
     restart: always
 
   digest-cron:
     build: .
     command: bun run cron
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
       AI_BASE_URL: ${AI_BASE_URL}
       AI_MODEL: ${AI_MODEL}
       CHOKIDAR_USEPOLLING: 1
@@ -97,13 +103,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
     restart: always
 
   forecast-cron:
     build: .
     command: bun run forecast-cron
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
       AI_BASE_URL: ${AI_BASE_URL}
       AI_MODEL: ${AI_MODEL}
       CHOKIDAR_USEPOLLING: 1
@@ -112,20 +120,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
     restart: always
 
   daily-insight-cron:
     build: .
     command: bun run src/application/cron/daily-insight-cron.ts
     environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
+      DATABASE_URL: postgres://finance:finance@pgbouncer:5432/finance
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
     restart: unless-stopped
 
   postgres:
     image: postgres:16
+    command: ["postgres", "-c", "max_connections=200"]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -148,6 +161,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  pgbouncer:
+    image: edoburu/pgbouncer
+    environment:
+      DB_USER: finance
+      DB_PASSWORD: finance
+      DB_HOST: postgres
+      DB_NAME: finance
+      POOL_MODE: session
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
