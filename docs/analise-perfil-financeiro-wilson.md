@@ -1,6 +1,4 @@
 # Análise do Perfil Financeiro — Wilson
-# Análise do Perfil Financeiro — Wilson
-# Análise do Perfil Financeiro — Wilson
 
 Data da análise: 2026-05-20
 
