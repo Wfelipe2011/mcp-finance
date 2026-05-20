@@ -169,9 +169,10 @@ services:
       DB_PASSWORD: finance
       DB_HOST: postgres
       DB_NAME: finance
-      POOL_MODE: session
+      POOL_MODE: transaction
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
+      MAX_PREPARED_STATEMENTS: "200"
       AUTH_TYPE: scram-sha-256
     depends_on:
       postgres:
