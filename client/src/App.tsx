@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useEffect } from "react";
 import { MonthPicker } from "./components/MonthPicker.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { ConfigDialog } from "./components/ConfigDialog.tsx";
+import { DetailHeader } from "./components/DetailHeader.tsx";
 import { Resumo } from "./tabs/Resumo.tsx";
 import { Plano } from "./tabs/Plano.tsx";
 import { Gastos } from "./tabs/Gastos.tsx";
@@ -14,6 +15,8 @@ import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest, JwtPayload, UserRole } from "./api/types.ts";
 import { applyAppTheme, readStoredColorMode } from "./theme.ts";
 import type { AppColorMode } from "./theme.ts";
+import type { MainScreenId, DetailScreenId, ActiveDetail, DetailContext } from "./navigation.ts";
+import { DETAIL_METADATA } from "./navigation.ts";
 
 const Credito = lazy(() =>
   import("./tabs/Credito.tsx").then((module) => ({ default: module.Credito })),
@@ -49,26 +52,20 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-type MainScreenId = "hoje" | "plano";
-type DetailScreenId = "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "simulacao" | "admin";
-type ScreenId = MainScreenId | DetailScreenId;
-
 const MAIN_NAV_ITEMS: { id: MainScreenId; label: string; icon: string }[] = [
   { id: "hoje", label: "Hoje", icon: "🏠" },
   { id: "plano", label: "Plano", icon: "🗺️" },
 ];
 
-const DETAIL_SCREENS: { id: DetailScreenId; label: string; icon: string }[] = [
-  { id: "gastos", label: "Gastos", icon: "🧾" },
-  { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
-  { id: "investimentos", label: "Investimentos", icon: "📈" },
-  { id: "metas", label: "Metas", icon: "🎯" },
-  { id: "simulacao", label: "Simulação", icon: "🔮" },
-  { id: "credito", label: "Crédito", icon: "💳" },
-  { id: "ia", label: "Insights", icon: "✨" },
+const DETAIL_SCREENS: DetailScreenId[] = [
+  "gastos",
+  "proximo-mes",
+  "investimentos",
+  "metas",
+  "simulacao",
+  "credito",
+  "ia",
 ];
-
-const ADMIN_DETAIL: { id: DetailScreenId; label: string; icon: string } = { id: "admin", label: "Admin", icon: "🛡️" };
 
 export function App() {
   const [authToken, setAuthToken] = useState<string | null>(
@@ -79,7 +76,8 @@ export function App() {
   );
   const [digest, setDigest] = useState<Digest | null>(null);
   const [meses, setMeses] = useState<string[]>([]);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>("hoje");
+  const [activeMainScreen, setActiveMainScreen] = useState<MainScreenId>("hoje");
+  const [activeDetail, setActiveDetail] = useState<ActiveDetail | null>(null);
   const [colorMode, setColorMode] = useState<AppColorMode>(
     readStoredColorMode()
   );
@@ -91,13 +89,35 @@ export function App() {
   void meses;
 
   const userRole: UserRole = authToken ? (decodeJwtPayload(authToken)?.role ?? "member") : "member";
-  const drawerDetailItems = userRole === "admin"
-    ? [...DETAIL_SCREENS, ADMIN_DETAIL]
+  const drawerDetailIds = userRole === "admin"
+    ? ([...DETAIL_SCREENS, "admin"] as DetailScreenId[])
     : DETAIL_SCREENS;
 
+  function openMain(id: MainScreenId) {
+    setActiveMainScreen(id);
+    setActiveDetail(null);
+  }
+
+  function openDetail(id: DetailScreenId, origin: MainScreenId = activeMainScreen, context?: DetailContext) {
+    if (id === "admin" && userRole !== "admin") {
+      openMain("hoje");
+      return;
+    }
+    setActiveDetail({ id, origin, context });
+  }
+
+  function closeDetail() {
+    const origin = activeDetail?.origin ?? "hoje";
+    setActiveDetail(null);
+    setActiveMainScreen(origin);
+  }
+
   useEffect(() => {
-    if (activeScreen === "admin" && userRole !== "admin") setActiveScreen("hoje");
-  }, [activeScreen, userRole]);
+    if (activeDetail?.id === "admin" && userRole !== "admin") {
+      setActiveDetail(null);
+      setActiveMainScreen("hoje");
+    }
+  }, [activeDetail?.id, userRole]);
 
   const handleMonthChange = (month: string) => {
     localStorage.setItem("selectedMonth", month);
@@ -166,12 +186,8 @@ export function App() {
     );
   }
 
-  function renderScreen() {
-    switch (activeScreen) {
-      case "hoje":
-        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateTo={(id) => setActiveScreen(id as ScreenId)} /> : null;
-      case "plano":
-        return <Plano onNavigateTo={(id) => setActiveScreen(id as ScreenId)} />;
+  function renderDetailContent(id: DetailScreenId) {
+    switch (id) {
       case "gastos":
         return selectedMonth ? <Gastos month={selectedMonth} /> : null;
       case "proximo-mes":
@@ -201,14 +217,51 @@ export function App() {
     }
   }
 
+  function renderScreen() {
+    if (activeDetail) {
+      const meta = DETAIL_METADATA[activeDetail.id];
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
+          <DetailHeader
+            title={meta.label}
+            description={meta.description}
+            origin={activeDetail.origin}
+            onBack={closeDetail}
+          />
+          {renderDetailContent(activeDetail.id)}
+        </div>
+      );
+    }
+
+    function navigateFromMain(id: string) {
+      if (id === "hoje" || id === "plano") {
+        openMain(id as MainScreenId);
+      } else {
+        openDetail(id as DetailScreenId, activeMainScreen);
+      }
+    }
+
+    switch (activeMainScreen) {
+      case "hoje":
+        return selectedMonth
+          ? <Resumo
+              month={selectedMonth}
+              digest={digest}
+              onNavigateTo={navigateFromMain}
+            />
+          : null;
+      case "plano":
+        return <Plano onNavigateTo={navigateFromMain} />;
+      default:
+        return null;
+    }
+  }
+
   return (
     <div className="drawer lg:drawer-open min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
-      {/* Drawer toggle (mobile) */}
       <input id="main-drawer" type="checkbox" className="drawer-toggle" />
 
-      {/* Drawer content */}
       <div className="drawer-content flex flex-col">
-        {/* Header */}
         <header
           style={{
             padding: "var(--space-md)",
@@ -221,7 +274,6 @@ export function App() {
           }}
         >
           <div>
-            {/* Hamburger (mobile) */}
             <label
               htmlFor="main-drawer"
               className="btn btn-ghost btn-sm lg:hidden"
@@ -317,7 +369,6 @@ export function App() {
           </div>
         </header>
 
-        {/* Main content */}
         <main
           style={{
             flex: 1,
@@ -332,14 +383,13 @@ export function App() {
           {renderScreen()}
         </main>
 
-        {/* Dock (mobile only) */}
         <div className="dock app-dock lg:hidden">
           {MAIN_NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveScreen(item.id)}
-              className={activeScreen === item.id ? "dock-active" : ""}
+              onClick={() => openMain(item.id)}
+              className={(activeDetail?.origin ?? activeMainScreen) === item.id ? "dock-active" : ""}
             >
               <span aria-hidden style={{ fontSize: 20 }}>{item.icon}</span>
               <span className="dock-label">{item.label}</span>
@@ -348,7 +398,6 @@ export function App() {
         </div>
       </div>
 
-      {/* Drawer side (desktop sidebar) */}
       <div className="drawer-side" style={{ zIndex: 40 }}>
         <label htmlFor="main-drawer" aria-label="Fechar menu" className="drawer-overlay" />
         <nav
@@ -373,31 +422,34 @@ export function App() {
           >
             💰 Finanças
           </p>
-          {MAIN_NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveScreen(item.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-sm)",
-                padding: "var(--space-xs) var(--space-sm)",
-                borderRadius: "var(--radius-lg)",
-                border: "none",
-                background: activeScreen === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
-                color: activeScreen === item.id ? "var(--color-primary)" : "var(--color-text-body)",
-                fontWeight: activeScreen === item.id ? 700 : 400,
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                textAlign: "left",
-                width: "100%",
-              }}
-            >
-              <span aria-hidden style={{ fontSize: 18 }}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
+          {MAIN_NAV_ITEMS.map((item) => {
+            const isActive = !activeDetail && activeMainScreen === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openMain(item.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-sm)",
+                  padding: "var(--space-xs) var(--space-sm)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "none",
+                  background: isActive ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
+                  color: isActive ? "var(--color-primary)" : "var(--color-text-body)",
+                  fontWeight: isActive ? 700 : 400,
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 18 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          })}
           <div
             style={{
               borderTop: "1px solid var(--color-border-hairline)",
@@ -417,35 +469,38 @@ export function App() {
           >
             Detalhes
           </p>
-          {drawerDetailItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveScreen(item.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-sm)",
-                padding: "var(--space-xs) var(--space-sm)",
-                borderRadius: "var(--radius-lg)",
-                border: "none",
-                background: activeScreen === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
-                color: activeScreen === item.id ? "var(--color-primary)" : "var(--color-text-body)",
-                fontWeight: activeScreen === item.id ? 700 : 400,
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                textAlign: "left",
-                width: "100%",
-              }}
-            >
-              <span aria-hidden style={{ fontSize: 16 }}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
+          {drawerDetailIds.map((id) => {
+            const meta = DETAIL_METADATA[id];
+            const isActive = activeDetail?.id === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => openDetail(id, activeMainScreen)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-sm)",
+                  padding: "var(--space-xs) var(--space-sm)",
+                  borderRadius: "var(--radius-lg)",
+                  border: "none",
+                  background: isActive ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
+                  color: isActive ? "var(--color-primary)" : "var(--color-text-body)",
+                  fontWeight: isActive ? 700 : 400,
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 16 }}>{meta.icon}</span>
+                {meta.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
-      {/* Toast notification */}
       {toastVisible && (
         <div className="toast toast-bottom toast-center" style={{ zIndex: 50 }}>
           <div
