@@ -1,7 +1,7 @@
 import { createAgent, SystemMessage, HumanMessage } from "langchain";
 import { model } from "./model.ts";
 import { MonthlyDigestSchema, type MonthlyDigest } from "./schemas/MonthlyDigestSchema.ts";
-import type { MonthInsightRow, PreviousDigestRow, GoalProgressRow } from "../db/BunPgAdapter.ts";
+import type { MonthInsightRow, PreviousDigestRow, GoalProgressRow, BudgetExecutionRow } from "../db/BunPgAdapter.ts";
 
 // Agent 1: free-form analysis — no responseFormat so model responds in plain text
 const agentAnalyze = createAgent({ model });
@@ -22,6 +22,7 @@ interface DigestInput {
   insights: MonthInsightRow[];
   previousDigests: PreviousDigestRow[];
   activeGoals?: GoalProgressRow[];
+  budgetAlerts?: BudgetExecutionRow[];
 }
 
 const MONTH_NAMES: Record<number, string> = {
@@ -60,6 +61,16 @@ export async function generateDigest(input: DigestInput): Promise<MonthlyDigest>
       }).join("\n")
     : "";
 
+  const budgetsSection = input.budgetAlerts && input.budgetAlerts.length > 0
+    ? `\nORÇAMENTOS (categorias com alerta):\n` +
+      input.budgetAlerts.map((b) => {
+        const pct = (Number(b.used_ratio) * 100).toFixed(1);
+        const status = b.budget_status === 'exceeded' ? 'ESTOURADO' : 'ATENÇÃO (≥80%)';
+        return `- ${b.category_pt}: gasto R$${Number(b.spent_amount).toFixed(2)} de R$${Number(b.monthly_limit).toFixed(2)} (${pct}%) — ${status}`;
+      }).join("\n") +
+      "\nComente sobre as categorias com orçamento estourado ou próximo do limite."
+    : "";
+
   // ── Agent 1: free-form financial analysis ─────────────────────────────────
   const analysisResult = await agentAnalyze.invoke({
     messages: [
@@ -77,7 +88,7 @@ MÉTRICAS CALCULADAS:
 - Cobertura de enriquecimento: ${(input.enrichment_coverage * 100).toFixed(1)}%
 
 TRANSAÇÕES NOTÁVEIS (anomaly_score > 0.6):
-${notableItems.length > 0 ? notableItems.join("\n") : "Nenhuma transação com anomalia alta detectada"}${historySection}${goalsSection}`
+${notableItems.length > 0 ? notableItems.join("\n") : "Nenhuma transação com anomalia alta detectada"}${historySection}${goalsSection}${budgetsSection}`
       ),
     ],
   });

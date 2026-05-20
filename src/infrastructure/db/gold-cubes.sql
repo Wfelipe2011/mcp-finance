@@ -471,3 +471,32 @@ SELECT
   is_overdue,
   progress_ratio * 100 AS progress_pct
 FROM base;
+
+-- ────────────────────────────────────────────────
+-- budget_execution_view
+-- Orçamentos mensais com execução do mês corrente
+-- Grain: um registro por orçamento ativo (tenant_id, category_pt)
+-- Usa security_invoker = true → herda RLS do caller
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW budget_execution_view WITH (security_invoker = true) AS
+SELECT
+  b.id,
+  b.tenant_id,
+  b.category_pt,
+  b.monthly_limit,
+  b.is_active,
+  b.created_at,
+  COALESCE(c.total_gastos, 0)::NUMERIC(12,2)                             AS spent_amount,
+  (b.monthly_limit - COALESCE(c.total_gastos, 0))::NUMERIC(12,2)        AS remaining,
+  (COALESCE(c.total_gastos, 0) / b.monthly_limit)::NUMERIC(8,4)         AS used_ratio,
+  CASE
+    WHEN COALESCE(c.total_gastos, 0) >= b.monthly_limit       THEN 'exceeded'
+    WHEN COALESCE(c.total_gastos, 0) >= b.monthly_limit * 0.8 THEN 'warning'
+    ELSE 'ok'
+  END                                                                    AS budget_status
+FROM category_budgets b
+LEFT JOIN cube_gastos_categoria_mensal c
+  ON  c.category_pt = b.category_pt
+  AND c.year  = EXTRACT(YEAR  FROM CURRENT_DATE)::INT
+  AND c.month = EXTRACT(MONTH FROM CURRENT_DATE)::INT
+WHERE b.is_active = true;

@@ -21,6 +21,7 @@ import type {
   MessagesRange,
   Goal,
   GoalType,
+  BudgetExecution,
 } from "./types.ts";
 
 const BASE = "";
@@ -289,6 +290,36 @@ export async function updateGoal(id: number, data: Partial<Pick<Goal, 'name' | '
 
 export async function deleteGoal(id: number): Promise<void> {
   const res = await fetch(`/api/goals/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+}
+
+export function fetchBudgets(): Promise<BudgetExecution[]> {
+  return get<BudgetExecution[]>("/api/budgets");
+}
+
+export async function upsertBudget(data: { category_pt: string; monthly_limit: number }): Promise<BudgetExecution> {
+  const res = await fetch("/api/budgets", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<BudgetExecution>;
+}
+
+export async function deleteBudget(id: number): Promise<void> {
+  const res = await fetch(`/api/budgets/${id}`, {
     method: "DELETE",
     headers: authHeaders(),
   });

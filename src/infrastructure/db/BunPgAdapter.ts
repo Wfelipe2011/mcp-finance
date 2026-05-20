@@ -109,6 +109,22 @@ export interface GoalProgressRow extends GoalRow {
   is_overdue: boolean;
 }
 
+export interface BudgetRow {
+  id: number;
+  tenant_id: string;
+  category_pt: string;
+  monthly_limit: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface BudgetExecutionRow extends BudgetRow {
+  spent_amount: number;
+  remaining: number;
+  used_ratio: number;
+  budget_status: 'ok' | 'warning' | 'exceeded';
+}
+
 export interface SimpleQueueStats {
   pending: number;
   running: number;
@@ -304,6 +320,12 @@ export class BunPgAdapter {
     update(id: number, data: Partial<Pick<GoalRow, 'name' | 'current_amount' | 'deadline' | 'status' | 'notes' | 'target_amount'>>): Promise<GoalRow | null>;
     remove(id: number): Promise<void>;
     getActiveForDigest(): Promise<GoalProgressRow[]>;
+  };
+  readonly budgets: {
+    getAll(): Promise<BudgetExecutionRow[]>;
+    upsert(data: { category_pt: string; monthly_limit: number }): Promise<BudgetRow>;
+    remove(id: number): Promise<void>;
+    getExceededOrWarning(): Promise<BudgetExecutionRow[]>;
   };
   readonly users: {
     getAll(): Promise<{ id: number; name: string; display_name: string }[]>;
@@ -1284,6 +1306,67 @@ export class BunPgAdapter {
             FROM goals_progress_view
             ORDER BY deadline ASC NULLS LAST, created_at ASC
             LIMIT 5
+          `;
+          return rows;
+        });
+      },
+    };
+
+    // ── budgets ───────────────────────────────────────────────────────────────
+    this.budgets = {
+      async getAll() {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<BudgetExecutionRow[]>`
+            SELECT id, tenant_id, category_pt,
+                   monthly_limit::float8 AS monthly_limit,
+                   spent_amount::float8 AS spent_amount,
+                   remaining::float8 AS remaining,
+                   used_ratio::float8 AS used_ratio,
+                   budget_status, is_active,
+                   created_at::text AS created_at
+            FROM budget_execution_view
+            ORDER BY category_pt ASC
+          `;
+          return rows;
+        });
+      },
+      async upsert(data) {
+        if (!tid) throw new Error("upsert de orçamento requer tenantId");
+        const rows = await sql.begin(async (tx) => {
+          await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          return tx<BudgetRow[]>`
+            INSERT INTO category_budgets (tenant_id, category_pt, monthly_limit)
+            VALUES (${tid}::uuid, ${data.category_pt}, ${data.monthly_limit})
+            ON CONFLICT (tenant_id, category_pt) DO UPDATE
+              SET monthly_limit = EXCLUDED.monthly_limit, is_active = true
+            RETURNING id, tenant_id, category_pt,
+                      monthly_limit::float8 AS monthly_limit,
+                      is_active, created_at::text AS created_at
+          `;
+        });
+        return rows[0]!;
+      },
+      async remove(id) {
+        await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          await tx`DELETE FROM category_budgets WHERE id = ${id}`;
+        });
+      },
+      async getExceededOrWarning() {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<BudgetExecutionRow[]>`
+            SELECT id, tenant_id, category_pt,
+                   monthly_limit::float8 AS monthly_limit,
+                   spent_amount::float8 AS spent_amount,
+                   remaining::float8 AS remaining,
+                   used_ratio::float8 AS used_ratio,
+                   budget_status, is_active,
+                   created_at::text AS created_at
+            FROM budget_execution_view
+            WHERE budget_status IN ('exceeded', 'warning')
+            ORDER BY used_ratio DESC
           `;
           return rows;
         });

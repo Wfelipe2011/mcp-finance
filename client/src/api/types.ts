@@ -7,6 +7,21 @@ export interface User {
 export type GoalType = 'saving' | 'spending';
 export type GoalStatus = 'active' | 'achieved' | 'abandoned';
 
+export type BudgetStatus = 'ok' | 'warning' | 'exceeded';
+
+export interface BudgetExecution {
+  id: number;
+  tenant_id: string;
+  category_pt: string;
+  monthly_limit: number;
+  spent_amount: number;
+  remaining: number;
+  used_ratio: number;
+  budget_status: BudgetStatus;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Goal {
   id: number;
   tenant_id: string;

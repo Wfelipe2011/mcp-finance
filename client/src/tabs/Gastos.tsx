@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { fetchGastos, fetchTendencias } from "../api/client.ts";
-import type { GastosMensais, Tendencias } from "../api/types.ts";
+import { useState, useEffect, useCallback } from "react";
+import { fetchGastos, fetchTendencias, fetchBudgets } from "../api/client.ts";
+import type { GastosMensais, Tendencias, BudgetExecution } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { GruposDonut } from "../components/GruposDonut.tsx";
@@ -8,6 +8,7 @@ import { CategoriaBarList } from "../components/CategoriaBarList.tsx";
 import { NovosGastos } from "../components/NovosGastos.tsx";
 import { TendenciasGrupos } from "../components/TendenciasGrupos.tsx";
 import { TendenciasRecorrentes } from "../components/TendenciasRecorrentes.tsx";
+import { BudgetCard } from "../components/BudgetCard.tsx";
 import { formatBRL } from "../utils/format.ts";
 
 const cardStyle = {
@@ -29,8 +30,13 @@ const captionMutedStyle = { ...captionStyle, letterSpacing: 0.8, color: "var(--c
 export function Gastos({ month }: { month: string }) {
   const [data, setData] = useState<GastosMensais | null>(null);
   const [tendencias, setTendencias] = useState<Tendencias | null>(null);
+  const [budgets, setBudgets] = useState<BudgetExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const loadBudgets = useCallback(() => {
+    fetchBudgets().then(setBudgets).catch(() => setBudgets([]));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -38,8 +44,9 @@ export function Gastos({ month }: { month: string }) {
     Promise.all([
       fetchGastos(month),
       fetchTendencias().catch(() => null),
+      fetchBudgets().catch(() => []),
     ])
-      .then(([d, t]) => { setData(d); setTendencias(t); setLoading(false); })
+      .then(([d, t, b]) => { setData(d); setTendencias(t); setBudgets(b); setLoading(false); })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Erro ao carregar gastos");
         setLoading(false);
@@ -99,6 +106,14 @@ export function Gastos({ month }: { month: string }) {
           </div>
         </div>
       )}
+
+      <div style={cardStyle}>
+        <BudgetCard
+          budgets={budgets}
+          categorias={data.categorias}
+          onRefresh={loadBudgets}
+        />
+      </div>
 
       {tendencias && (
         <>

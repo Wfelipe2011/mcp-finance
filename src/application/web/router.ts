@@ -19,6 +19,7 @@ import { handleLogin } from "./routes/auth.ts";
 import { handleSync } from "./routes/sync.ts";
 import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
 import { handleGetGoals, handleCreateGoal, handleUpdateGoal, handleDeleteGoal } from "./routes/goals.ts";
+import { handleGetBudgets, handleUpsertBudget, handleDeleteBudget } from "./routes/budgets.ts";
 import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
@@ -56,6 +57,9 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/goals" && req.method === "POST") return handleCreateGoal(req, tenantId, sql);
   if (path.startsWith("/api/goals/") && req.method === "PUT") return handleUpdateGoal(req, url, tenantId, sql);
   if (path.startsWith("/api/goals/") && req.method === "DELETE") return handleDeleteGoal(req, url, tenantId, sql);
+  if (path === "/api/budgets" && req.method === "GET") return handleGetBudgets(req, tenantId, sql);
+  if (path === "/api/budgets" && req.method === "POST") return handleUpsertBudget(req, tenantId, sql);
+  if (path.startsWith("/api/budgets/") && req.method === "DELETE") return handleDeleteBudget(req, url, tenantId, sql);
   if (path === "/api/cashflow" && req.method === "GET") return handleCashflow(req, url, tenantId, sql);
   if (path === "/api/cashflow/projetado" && req.method === "GET") return handleCashflowProjetado(req, url, tenantId, sql);
   if (path === "/api/gastos" && req.method === "GET") return handleGastos(req, url, tenantId, sql);

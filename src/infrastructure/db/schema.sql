@@ -587,6 +587,28 @@ CREATE POLICY tenant_isolation ON financial_goals
 
 -- Note: enrich_jobs and workers do NOT have RLS — workers need cross-tenant visibility
 
+-- ────────────────────────────────────────────────
+-- category_budgets (orçamentos mensais por categoria por tenant)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS category_budgets (
+  id             SERIAL PRIMARY KEY,
+  tenant_id      UUID NOT NULL REFERENCES tenants(id),
+  category_pt    TEXT NOT NULL,
+  monthly_limit  NUMERIC(12,2) NOT NULL CHECK (monthly_limit > 0),
+  is_active      BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_category_budgets_tenant_category UNIQUE (tenant_id, category_pt)
+);
+
+CREATE INDEX IF NOT EXISTS idx_category_budgets_tenant_active
+  ON category_budgets (tenant_id, is_active);
+
+-- category_budgets RLS
+ALTER TABLE category_budgets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE category_budgets FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON category_budgets
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
 -- ════════════════════════════════════════════════
 -- Application role (non-superuser, RLS-compliant)
 -- ════════════════════════════════════════════════
