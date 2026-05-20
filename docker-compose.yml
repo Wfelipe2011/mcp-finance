@@ -29,6 +29,7 @@ services:
       TOKEN_URL: http://auth:3000/token
       AI_BASE_URL: ${AI_BASE_URL}
       AI_MODEL: ${AI_MODEL}
+      AI_API_KEY: ${AI_API_KEY}
       APP_USERNAME: ${APP_USERNAME}
       APP_PASSWORD: ${APP_PASSWORD}
       APP_SECRET: ${APP_SECRET}
@@ -38,6 +39,8 @@ services:
       CHOKIDAR_USEPOLLING: 1
       CHOKIDAR_INTERVAL: 10000
       TIMEZONE: America/Sao_Paulo
+      MCP_BASE_URL: ${MCP_BASE_URL}
+      NODE_ENV: ${NODE_ENV}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
     depends_on:

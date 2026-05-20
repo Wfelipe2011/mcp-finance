@@ -22,14 +22,18 @@
  *
  * Configuração via variáveis de ambiente:
  *   MCP_BASE_URL       — URL do servidor MCP (padrão: http://mcp-server:3002/mcp)
- *   OPENROUTER_MODEL   — Modelo LLM (padrão: deepseek/deepseek-chat)
- *   OPENROUTER_API_KEY — API key do OpenRouter
+ *   OPENROUTER_MODEL   — Modelo OpenRouter opcional (padrão: deepseek/deepseek-chat)
+ *   OPENROUTER_API_KEY — API key do OpenRouter opcional
+ *   AI_BASE_URL        — URL OpenAI-compatible usada quando OpenRouter não está configurado
+ *   AI_MODEL           — Modelo OpenAI-compatible usado quando OpenRouter não está configurado
+ *   AI_API_KEY         — API key OpenAI-compatible usada quando OpenRouter não está configurado
  *   DATABASE_URL       — Postgres para PostgresSaver (somente NODE_ENV=production)
  */
 
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { HumanMessage } from "@langchain/core/messages";
+import { ChatOpenAI } from "@langchain/openai";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { createAgent, createMiddleware, summarizationMiddleware } from "langchain";
 import { MemorySaver } from "@langchain/langgraph";
@@ -254,14 +258,25 @@ export async function setupCheckpointer(): Promise<void> {
 // ─── LLM ──────────────────────────────────────────────────────────────────────
 
 function createLlm() {
-  const apiKey = process.env["OPENROUTER_API_KEY"];
-  if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY não configurado");
+  const openRouterApiKey = process.env["OPENROUTER_API_KEY"]?.trim();
+  if (openRouterApiKey) {
+    return new ChatOpenRouter({
+      model: process.env["OPENROUTER_MODEL"]?.trim() || "deepseek/deepseek-chat",
+      apiKey: openRouterApiKey,
+      temperature: 0,
+    });
   }
 
-  return new ChatOpenRouter({
-    model: process.env["OPENROUTER_MODEL"] ?? "deepseek/deepseek-chat",
-    apiKey,
+  const baseURL = process.env["AI_BASE_URL"]?.trim();
+  if (!baseURL) throw new Error("AI_BASE_URL não configurado");
+
+  const modelName = process.env["AI_MODEL"]?.trim();
+  if (!modelName) throw new Error("AI_MODEL não configurado");
+
+  return new ChatOpenAI({
+    model: modelName,
+    apiKey: process.env["AI_API_KEY"]?.trim() || "local",
+    configuration: { baseURL },
     temperature: 0,
   });
 }
