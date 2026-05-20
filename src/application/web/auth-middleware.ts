@@ -6,7 +6,12 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function verifyAuth(req: Request): Promise<{ valid: true; tenantId: string } | { valid: false; status: number }> {
+export async function verifyAuth(
+  req: Request,
+): Promise<
+  | { valid: true; tenantId: string; userId: string; role: "member" | "admin" }
+  | { valid: false; status: number }
+> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return { valid: false, status: 401 };
@@ -18,7 +23,11 @@ export async function verifyAuth(req: Request): Promise<{ valid: true; tenantId:
     const { payload } = await jwtVerify(token, secret);
     const tenantId = payload.tenant_id as string | undefined;
     if (!tenantId) return { valid: false, status: 401 };
-    return { valid: true, tenantId };
+    const userId = payload.sub as string | undefined;
+    if (!userId) return { valid: false, status: 401 };
+    const roleRaw = payload.role as string | undefined;
+    const role: "member" | "admin" = roleRaw === "admin" ? "admin" : "member";
+    return { valid: true, tenantId, userId, role };
   } catch {
     return { valid: false, status: 401 };
   }

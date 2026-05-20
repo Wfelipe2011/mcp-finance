@@ -1,6 +1,6 @@
 import { SQL } from "bun";
 import { hash } from "bcryptjs";
-import { BunPgAdapter } from "../../../../infrastructure/db/BunPgAdapter.ts";
+import { BunPgAdapter, type TenantRow } from "../../../../infrastructure/db/BunPgAdapter.ts";
 import { requireSuperAdmin } from "../../auth-middleware.ts";
 import { jsonResponse, errorResponse } from "../../helpers.ts";
 
@@ -14,7 +14,7 @@ function normalizeStatusForResponse(status: string): string {
   return status === "suspended" ? "inactive" : status;
 }
 
-function normalizeTenantResponse(tenant: Record<string, unknown>): Record<string, unknown> {
+function normalizeTenantResponse(tenant: TenantRow): TenantRow {
   return { ...tenant, status: normalizeStatusForResponse(tenant.status as string) };
 }
 
@@ -60,7 +60,7 @@ export async function handleCreateTenant(req: Request, sql: SQL): Promise<Respon
       pluggy_email: pluggy_email?.trim() || null,
       pluggy_password: pluggy_password?.trim() || null,
     });
-    return jsonResponse(normalizeTenantResponse(tenant as unknown as Record<string, unknown>), 201);
+    return jsonResponse(normalizeTenantResponse(tenant), 201);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("tenants_email_key") || msg.includes("unique")) {
@@ -94,5 +94,5 @@ export async function handleToggleTenantStatus(req: Request, url: URL, sql: SQL)
   const tenant = await db.tenants.setStatus(id, status);
   if (!tenant) return errorResponse("Tenant não encontrado", 404);
 
-  return jsonResponse(normalizeTenantResponse(tenant as unknown as Record<string, unknown>));
+  return jsonResponse(normalizeTenantResponse(tenant));
 }

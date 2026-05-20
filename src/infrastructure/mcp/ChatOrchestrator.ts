@@ -1,47 +1,49 @@
 /**
- * Orquestrador de chat via MCP.
+ * Orquestrador de chat via agente LangChain + MCP.
  *
  * ## Fluxo de execução
  *
  *   Cliente → POST /api/chat (web :3001)
- *     → ChatOrchestrator.orchestrateChat()
- *       → detectIntent()           — detecção determinística por palavras-chave
- *       → callMcpTool()            — chamada JSON-RPC ao servidor MCP (:3002)
- *       → naturalize*()            — template em pt-BR, máx 3 frases
+ *     → ChatOrchestrator.orchestrateChat(message, { tenantId, userId, role })
+ *       → processarMensagemDoChat()  — agente LangChain com tools MCP wrappadas
+ *         → MultiServerMCPClient    — conexão lazy ao servidor MCP (:3002)
+ *         → buildWrappedTools       — injeta tenant_id do estado, nunca do LLM
+ *         → createAgent             — stateSchema + checkpointer + middleware
  *     ← { reply: string }
  *
- *   Resumo: web 3001 → MCP 3002 → naturalização → cliente
- *
- * ## Etapas internas
- *
- *  1. Detecta a intent da mensagem por palavras-chave (determinístico, sem LLM)
- *  2. Monta os argumentos obrigatórios para a tool MCP correspondente
- *  3. Chama o servidor MCP via `callMcpTool`
- *  4. Naturaliza o payload estruturado em resposta curta em pt-BR (máx 3 frases)
- *  5. Aplica fallback seguro em caso de intent desconhecida ou erro inesperado
+ * ## Segurança
+ *   - thread_id = `${tenantId}:${userId}` — isolamento por usuário
+ *   - tenant_id injetado no estado autenticado antes de chamar cada tool MCP
+ *   - Tools admin-only filtradas para usuários member
  *
  * @see docs/chat-flow.md — documentação técnica do fluxo completo
  */
 
-import { processarMensagemDoChat } from "./McpClient.ts";
-
-
-/** Mensagem de fallback segura exibida quando a intent é desconhecida ou ocorre erro. */
-const FALLBACK_MESSAGE =
-  "Desculpe, não consegui entender sua pergunta. Tente perguntar sobre seu saldo mensal, assinaturas ou cartões de crédito.";
+import {
+  processarMensagemDoChat,
+  type AgentUserRole,
+} from "./McpClient.ts";
 
 // ---------------------------------------------------------------------------
 // Ponto de entrada do orquestrador
 // ---------------------------------------------------------------------------
 
 /**
- * Orquestra uma mensagem de chat via servidor MCP.
+ * Orquestra uma mensagem de chat via agente LangChain com tools MCP.
  *
  * @param message  Mensagem do usuário (texto livre).
- * @param tenantId UUID do tenant autenticado (NÃO vem do body da requisição).
- * @returns        Resposta naturalizada em pt-BR, em no máximo 3 frases.
+ * @param tenantId UUID do tenant autenticado (do JWT — nunca do body).
+ * @param userId   ID do usuário autenticado (campo `sub` do JWT).
+ * @param role     Role do usuário (`member` | `admin`).
+ * @returns        Resposta do LLM em pt-BR.
  */
-export async function orchestrateChat(message: string, tenantId: string) {
-  const response = await processarMensagemDoChat(message, tenantId);
-  return response ?? FALLBACK_MESSAGE;
+export async function orchestrateChat(
+  message: string,
+  {
+    tenantId,
+    userId,
+    role,
+  }: { tenantId: string; userId: string; role: AgentUserRole },
+): Promise<string> {
+  return processarMensagemDoChat(message, { tenantId, userId, role });
 }

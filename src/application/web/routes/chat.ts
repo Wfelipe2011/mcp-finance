@@ -6,6 +6,7 @@ import {
   McpTimeoutError,
   McpToolError,
   McpParseError,
+  type AgentUserRole,
 } from "../../../infrastructure/mcp/McpClient.ts";
 
 interface ChatRequestBody {
@@ -18,12 +19,14 @@ interface ChatRequestBody {
  *
  * Contrato da API: { message: string, history?: Array<{role, content}> } → { reply: string }
  *
- * O tenantId é obtido exclusivamente do JWT autenticado (parâmetro da função),
+ * O tenantId, userId e role são obtidos exclusivamente do JWT autenticado (parâmetros da função),
  * nunca do body da requisição.
  */
 export async function handleChat(
   req: Request,
   tenantId: string,
+  userId: string,
+  role: AgentUserRole,
 ): Promise<Response> {
   let body: ChatRequestBody;
   try {
@@ -32,7 +35,7 @@ export async function handleChat(
     return errorResponse("Body inválido", 400);
   }
 
-  // 3.2 — Validação de entrada: message obrigatório
+  // Validação de entrada: message obrigatório
   if (typeof body.message !== "string" || body.message.trim() === "") {
     return errorResponse(
       "O campo 'message' é obrigatório e não pode estar vazio",
@@ -40,7 +43,7 @@ export async function handleChat(
     );
   }
 
-  // 3.2 — Validação de entrada: history opcional mas com estrutura válida
+  // Validação de entrada: history opcional mas com estrutura válida
   if (body.history !== undefined) {
     if (!Array.isArray(body.history)) {
       return errorResponse("O campo 'history' deve ser um array", 400);
@@ -61,34 +64,24 @@ export async function handleChat(
   }
 
   const message = body.message.trim();
-
-  // 3.4 — Detecta intent antecipadamente para registrar nos logs operacionais
-  // sem precisar logar o conteúdo da mensagem do usuário
-  const inicioMs = Date.now();
+  const startMs = Date.now();
 
   try {
-    // 3.1 — Orquestração via MCP em vez de chamada direta ao LangChain
-    // 3.3 — tenantId vem do parâmetro autenticado, nunca do body
-    const reply = await orchestrateChat(message, tenantId);
+    const reply = await orchestrateChat(message, { tenantId, userId, role });
 
-    // 3.4 — Log operacional: latência e intent detectada (sem conteúdo sensível)
-    console.log(
-      `[chat] status=ok latencia=${Date.now() - inicioMs}ms`,
-    );
+    console.log(`[chat] status=ok latencia=${Date.now() - startMs}ms`);
 
     return jsonResponse({ reply });
   } catch (err) {
-    // 3.4 — Classifica o tipo de erro para o log operacional sem expor detalhes internos
     let tipoErro = "ERRO_INTERNO";
     if (err instanceof McpTimeoutError) tipoErro = "TIMEOUT";
     else if (err instanceof McpToolError) tipoErro = "MCP_TOOL_ERROR";
     else if (err instanceof McpParseError) tipoErro = "MCP_PARSE_ERROR";
 
     console.error(
-      `[chat] status=erro latencia=${Date.now() - inicioMs}ms tipo=${tipoErro}`,
+      `[chat] status=erro latencia=${Date.now() - startMs}ms tipo=${tipoErro}`,
     );
 
-    // 3.2 — Resposta 500 padronizada sem vazar detalhes internos ao cliente
     return errorResponse("Erro interno ao processar a resposta do chat", 500);
   }
 }

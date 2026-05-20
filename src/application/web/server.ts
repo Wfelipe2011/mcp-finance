@@ -2,6 +2,7 @@ import { SQL } from "bun";
 import { serveStatic } from "./static.ts";
 import { router } from "./router.ts";
 import { verifyAuth } from "./auth-middleware.ts";
+import { setupCheckpointer } from "../../infrastructure/mcp/McpClient.ts";
 
 const PORT = parseInt(process.env["PORT"] ?? "3001", 10);
 
@@ -11,6 +12,10 @@ const sharedSql = new SQL(dbUrl);
 
 process.on("SIGTERM", async () => { await sharedSql.close(); process.exit(0); });
 process.on("SIGINT",  async () => { await sharedSql.close(); process.exit(0); });
+
+// Inicializa checkpointer antes de aceitar requisições de chat
+// (cria tabelas LangGraph no Postgres em produção; no-op em desenvolvimento)
+await setupCheckpointer();
 
 async function tenantExists(tenantId: string): Promise<boolean> {
   try {
@@ -41,18 +46,18 @@ const server = Bun.serve({
 
     // Admin panel (no auth required — JS handles it client-side)
     if (url.pathname === "/admin" && req.method === "GET") {
-      return router(req, url, "", sharedSql);
+      return router(req, url, "", "", "member", sharedSql);
     }
 
     // Route API requests
     if (url.pathname.startsWith("/api/")) {
       // Public endpoints (no tenant auth required)
       if (url.pathname === "/api/auth/login" || url.pathname === "/api/admin/login") {
-        return router(req, url, "", sharedSql);
+        return router(req, url, "", "", "member", sharedSql);
       }
       // Admin endpoints use their own auth (requireSuperAdmin)
       if (url.pathname.startsWith("/api/admin/")) {
-        return router(req, url, "", sharedSql);
+        return router(req, url, "", "", "member", sharedSql);
       }
       const auth = await verifyAuth(req);
       if (!auth.valid) {
@@ -68,7 +73,7 @@ const server = Bun.serve({
           headers: { "Content-Type": "application/json" },
         });
       }
-      return router(req, url, auth.tenantId, sharedSql);
+      return router(req, url, auth.tenantId, auth.userId, auth.role, sharedSql);
     }
 
     // Serve static files (SPA fallback)

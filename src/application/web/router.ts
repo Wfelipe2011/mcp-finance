@@ -28,7 +28,14 @@ import { handleForecastDaily, handleForecastDailyRegenerate } from "./routes/for
 import { handleDailyCategoryExclusionPathPost, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
 import { handleExportTransactions, handleExportSummary } from "./routes/export.ts";
 
-export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
+export async function router(
+  req: Request,
+  url: URL,
+  tenantId: string,
+  userId: string,
+  userRole: "member" | "admin",
+  sql: SQL,
+): Promise<Response> {
   const path = url.pathname;
 
   if (path === "/admin" && req.method === "GET") return serveAdminPanel();
@@ -76,7 +83,7 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/groups" && req.method === "GET") return handleForecastGroups(req, tenantId, sql);
   if (path === "/api/forecast/categories" && req.method === "GET") return handleForecastCategories(req, tenantId, sql);
   if (path === "/api/forecast/message" && req.method === "GET") return handleForecastMessage(req, tenantId, sql);
-  if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId);
+  if (path === "/api/chat" && req.method === "POST") return handleChat(req, tenantId, userId, userRole);
   if (path === "/api/forecast/daily" && req.method === "GET") return handleForecastDaily(req, tenantId, sql);
   if (path === "/api/forecast/daily/regenerate" && req.method === "POST") return handleForecastDailyRegenerate(req, tenantId, sql);
 

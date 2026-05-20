@@ -3,8 +3,7 @@
  *
  * Cobre:
  *  - Validações de entrada: message obrigatório, history com estrutura válida
- *  - Sucesso: { reply: string } com mensagens de diferentes intents
- *  - Fallback de intent desconhecida (resposta 200 com mensagem amigável)
+ *  - Sucesso: { reply: string } com mensagens válidas
  *  - Falha do orquestrador: exceção inesperada → 500 sem vazar detalhes internos
  *  - Contrato da API: aceita { message, history? } e retorna { reply }
  *
@@ -20,17 +19,17 @@ import { mock, describe, it, expect, beforeEach } from "bun:test";
 // O bun:test hoista esta chamada para antes de todos os imports
 // ---------------------------------------------------------------------------
 
-const mockOrchestrateChat = mock(async (_message: string, _tenantId: string): Promise<string> => {
-  return "Resposta de teste do orquestrador";
-});
-
-const mockDetectIntent = mock((_message: string): string => {
-  return "get_monthly_balance";
-});
+const mockOrchestrateChat = mock(
+  async (
+    _message: string,
+    _opts: { tenantId: string; userId: string; role: "member" | "admin" },
+  ): Promise<string> => {
+    return "Resposta de teste do orquestrador";
+  },
+);
 
 mock.module("../../../../infrastructure/mcp/ChatOrchestrator.ts", () => ({
   orchestrateChat: mockOrchestrateChat,
-  detectIntent: mockDetectIntent,
 }));
 
 // ---------------------------------------------------------------------------
@@ -43,6 +42,8 @@ import { handleChat } from "../chat.ts";
 // ---------------------------------------------------------------------------
 
 const TENANT_ID = "tenant-test-uuid-123";
+const USER_ID = "user-test-uuid-456";
+const USER_ROLE = "member" as const;
 
 function makeJsonRequest(body: unknown): Request {
   return new Request("http://localhost:3001/api/chat", {
@@ -60,19 +61,21 @@ function makeInvalidJsonRequest(): Request {
   });
 }
 
+// Helper para chamar handleChat com parâmetros padrão
+function chatRequest(req: Request) {
+  return handleChat(req, TENANT_ID, USER_ID, USER_ROLE);
+}
+
 // ---------------------------------------------------------------------------
 // Suite de testes
 // ---------------------------------------------------------------------------
 
 describe("POST /api/chat — handleChat", () => {
   beforeEach(() => {
-    // Reseta contadores e restaura implementação padrão entre testes
     mockOrchestrateChat.mockClear();
-    mockDetectIntent.mockClear();
     mockOrchestrateChat.mockImplementation(
       async () => "Resposta de teste do orquestrador",
     );
-    mockDetectIntent.mockImplementation(() => "get_monthly_balance");
   });
 
   // -------------------------------------------------------------------------
@@ -81,7 +84,7 @@ describe("POST /api/chat — handleChat", () => {
 
   it("retorna 200 com { reply: string } para mensagem válida", async () => {
     const req = makeJsonRequest({ message: "qual meu saldo?" });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as { reply: string };
 
     expect(res.status).toBe(200);
@@ -89,14 +92,19 @@ describe("POST /api/chat — handleChat", () => {
     expect(json.reply).toBe("Resposta de teste do orquestrador");
   });
 
-  it("passa a mensagem trimada e o tenantId correto para orchestrateChat", async () => {
+  it("passa a mensagem trimada, tenantId, userId e role corretos para orchestrateChat", async () => {
     const req = makeJsonRequest({ message: "  qual meu saldo?  " });
-    await handleChat(req, TENANT_ID);
+    await chatRequest(req);
 
     expect(mockOrchestrateChat).toHaveBeenCalledTimes(1);
-    const [msg, tid] = mockOrchestrateChat.mock.calls[0] as [string, string];
+    const [msg, opts] = mockOrchestrateChat.mock.calls[0] as [
+      string,
+      { tenantId: string; userId: string; role: string },
+    ];
     expect(msg).toBe("qual meu saldo?");
-    expect(tid).toBe(TENANT_ID);
+    expect(opts.tenantId).toBe(TENANT_ID);
+    expect(opts.userId).toBe(USER_ID);
+    expect(opts.role).toBe(USER_ROLE);
   });
 
   it("aceita history opcional com itens válidos e retorna 200", async () => {
@@ -107,31 +115,29 @@ describe("POST /api/chat — handleChat", () => {
         { role: "assistant", content: "Olá! Como posso ajudar?" },
       ],
     });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(200);
   });
 
   it("aceita ausência de history e retorna 200", async () => {
     const req = makeJsonRequest({ message: "qual meu saldo?" });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(200);
   });
 
-  it("retorna o reply de fallback de intent desconhecida (status 200)", async () => {
+  it("retorna o reply de resposta do agente (status 200)", async () => {
     mockOrchestrateChat.mockImplementation(
-      async () =>
-        "Desculpe, não consegui entender sua pergunta. Tente perguntar sobre seu saldo mensal, assinaturas ou cartões de crédito.",
+      async () => "Seu saldo mensal é R$ 3.300,00 positivo.",
     );
-    mockDetectIntent.mockImplementation(() => "unknown");
 
-    const req = makeJsonRequest({ message: "que horas são?" });
-    const res = await handleChat(req, TENANT_ID);
+    const req = makeJsonRequest({ message: "qual meu saldo?" });
+    const res = await chatRequest(req);
     const json = (await res.json()) as { reply: string };
 
     expect(res.status).toBe(200);
-    expect(json.reply).toContain("Desculpe");
+    expect(json.reply).toContain("saldo");
   });
 
   // -------------------------------------------------------------------------
@@ -140,14 +146,14 @@ describe("POST /api/chat — handleChat", () => {
 
   it("retorna 400 quando o body não é JSON válido", async () => {
     const req = makeInvalidJsonRequest();
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
 
   it("retorna 400 quando message está ausente", async () => {
     const req = makeJsonRequest({});
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -156,28 +162,28 @@ describe("POST /api/chat — handleChat", () => {
 
   it("retorna 400 quando message é string vazia (somente espaços)", async () => {
     const req = makeJsonRequest({ message: "   " });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
 
   it("retorna 400 quando message é um número", async () => {
     const req = makeJsonRequest({ message: 42 });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
 
   it("retorna 400 quando message é null", async () => {
     const req = makeJsonRequest({ message: null });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
 
   it("retorna 400 quando history não é um array", async () => {
     const req = makeJsonRequest({ message: "qual meu saldo?", history: "não é array" });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -186,7 +192,7 @@ describe("POST /api/chat — handleChat", () => {
 
   it("retorna 400 quando history é um objeto (não array)", async () => {
     const req = makeJsonRequest({ message: "qual meu saldo?", history: { role: "user" } });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
@@ -196,7 +202,7 @@ describe("POST /api/chat — handleChat", () => {
       message: "qual meu saldo?",
       history: [{ role: "system", content: "instrução interna" }],
     });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
@@ -206,7 +212,7 @@ describe("POST /api/chat — handleChat", () => {
       message: "qual meu saldo?",
       history: [{ role: "user", content: 123 }],
     });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
@@ -216,7 +222,7 @@ describe("POST /api/chat — handleChat", () => {
       message: "qual meu saldo?",
       history: [{ content: "mensagem sem role" }],
     });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
 
     expect(res.status).toBe(400);
   });
@@ -231,40 +237,33 @@ describe("POST /api/chat — handleChat", () => {
     });
 
     const req = makeJsonRequest({ message: "qual meu saldo?" });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as { error: string };
 
     expect(res.status).toBe(500);
-    // Não deve vazar detalhes internos
     expect(json.error).not.toContain("Falha crítica inesperada no sistema interno");
     expect(json.error).toContain("Erro interno");
   });
 
   it("não invoca orchestrateChat quando a validação de entrada falha", async () => {
     const req = makeJsonRequest({ message: "" });
-    await handleChat(req, TENANT_ID);
+    await chatRequest(req);
 
     expect(mockOrchestrateChat).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
-  // Verificação de contrato da API (5.3)
-  //
-  // Garante que o endpoint continua compatível com o frontend sem mudanças:
-  //   Entrada:  { message: string, history?: Array<{ role, content }> }
-  //   Saída:    { reply: string }
+  // Contrato da API
   // -------------------------------------------------------------------------
 
   it("contrato: aceita { message: string } e retorna exatamente { reply: string }", async () => {
     const req = makeJsonRequest({ message: "qual meu saldo mensal?" });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
-    // Saída deve ter exatamente o campo 'reply'
     expect("reply" in json).toBe(true);
     expect(typeof json["reply"]).toBe("string");
-    // Não deve retornar campos extras não esperados pelo frontend
     expect(Object.keys(json)).toHaveLength(1);
   });
 
@@ -276,7 +275,7 @@ describe("POST /api/chat — handleChat", () => {
         { role: "assistant", content: "Você teve R$ 1.000 de despesas." },
       ],
     });
-    const res = await handleChat(req, TENANT_ID);
+    const res = await chatRequest(req);
     const json = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
@@ -285,15 +284,17 @@ describe("POST /api/chat — handleChat", () => {
   });
 
   it("contrato: tenantId nunca é lido do body (parâmetro autenticado)", async () => {
-    // Mesmo que body contenha tenant_id, o handler deve usar o parâmetro da função
     const req = makeJsonRequest({
       message: "qual meu saldo?",
       tenant_id: "tenant-malicioso-do-body",
     });
-    await handleChat(req, TENANT_ID);
+    await chatRequest(req);
 
-    const [, tid] = mockOrchestrateChat.mock.calls[0] as [string, string];
-    expect(tid).toBe(TENANT_ID);
-    expect(tid).not.toBe("tenant-malicioso-do-body");
+    const [, opts] = mockOrchestrateChat.mock.calls[0] as [
+      string,
+      { tenantId: string; userId: string; role: string },
+    ];
+    expect(opts.tenantId).toBe(TENANT_ID);
+    expect(opts.tenantId).not.toBe("tenant-malicioso-do-body");
   });
 });
