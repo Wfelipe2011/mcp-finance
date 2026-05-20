@@ -81,6 +81,6 @@ export async function handleQueueStats(req: Request, sql: SQL): Promise<Response
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
   const db = new BunPgAdapter(undefined, sql);
-  const stats = await db.jobQueue.getStatsByType();
-  return jsonResponse(stats);
+  const stats = await db.jobQueue.getStatsByType("enrich");
+  return jsonResponse(stats[0] ?? { job_type: "enrich", pending: 0, running: 0, done: 0, error: 0, skipped: 0 });
 }

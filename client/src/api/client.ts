@@ -589,6 +589,13 @@ export interface AdminWorker {
   ai_model: string;
 }
 
+export interface CreateWorkerData {
+  name: string;
+  ai_base_url: string;
+  ai_model: string;
+  ai_api_key?: string;
+}
+
 export interface CreateTenantData {
   name: string;
   email: string;
@@ -646,12 +653,15 @@ export async function adminCreateTenant(data: CreateTenantData): Promise<AdminTe
 }
 
 export async function adminQueueStats(): Promise<AdminQueueStatsByType> {
-  const [enrich, digest, forecast, dailyInsight] = await Promise.all([
-    get<RawAdminQueueStats>("/api/admin/queue-stats"),
+  const [enrichRaw, digest, forecast, dailyInsight] = await Promise.all([
+    get<RawAdminQueueStats | RawAdminQueueStats[]>("/api/admin/queue-stats"),
     get<RawAdminQueueStats>("/api/admin/digest/queue-stats"),
     get<RawAdminQueueStats>("/api/admin/forecast/queue-stats"),
     get<RawAdminQueueStats>("/api/admin/daily-insight/queue-stats"),
   ]);
+
+  const enrich = Array.isArray(enrichRaw) ? (enrichRaw[0] ?? {}) : enrichRaw;
+
   return {
     enrich: normalizeQueueStats(enrich),
     digest: normalizeQueueStats(digest),
@@ -688,6 +698,20 @@ export async function adminEnqueueEnrich(tenantId?: string): Promise<void> {
 
 export function adminListWorkers(): Promise<AdminWorker[]> {
   return get<AdminWorker[]>("/api/admin/workers");
+}
+
+export async function adminCreateWorker(data: CreateWorkerData): Promise<AdminWorker> {
+  const res = await fetch("/api/admin/workers", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<AdminWorker>;
 }
 
 export function fetchCompromissosCartoes(): Promise<CartaoResumo[]> {
