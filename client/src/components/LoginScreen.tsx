@@ -1,12 +1,4 @@
 import { useState } from "react";
-import {
-  Box,
-  Button,
-  CircularProgress,
-  TextField,
-  Typography,
-  Alert,
-} from "@mui/material";
 
 interface Props {
   onLogin: (token: string) => void;
@@ -42,76 +34,104 @@ export function LoginScreen({ onLogin }: Props) {
   }
 
   return (
-    <Box
-      sx={{
+    <div
+      style={{
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        px: "var(--space-md)",
-        bgcolor: "var(--color-canvas)",
+        padding: "0 var(--space-md)",
+        backgroundColor: "var(--color-canvas)",
       }}
     >
-      <Box
-        component="form"
-        onSubmit={handleSubmit}
-        sx={{
+      <form
+        onSubmit={(e) => void handleSubmit(e)}
+        style={{
           width: "100%",
           maxWidth: 380,
           display: "flex",
           flexDirection: "column",
           gap: "var(--space-sm)",
-          p: "var(--space-lg)",
+          padding: "var(--space-lg)",
           borderRadius: "var(--radius-xl)",
           border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
+          backgroundColor: "var(--color-surface-card)",
         }}
       >
-        <Typography
-          variant="h5"
-          fontWeight={700}
-          textAlign="center"
-          mb={1}
-          sx={{ color: "var(--color-text-primary)" }}
-        >
-          💰 Finanças
-        </Typography>
-
-        {error && <Alert severity="error">{error}</Alert>}
-
-        <TextField
-          label="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="username"
-          required
-          fullWidth
-        />
-        <TextField
-          label="Senha"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          required
-          fullWidth
-        />
-        <Button
-          type="submit"
-          variant="contained"
-          size="large"
-          disabled={loading}
-          fullWidth
-          sx={{
-            bgcolor: "var(--color-primary)",
-            color: "var(--color-on-primary)",
-            borderRadius: "var(--radius-md)",
+        <h2
+          style={{
+            fontWeight: 700,
+            fontSize: "1.3rem",
+            textAlign: "center",
+            marginBottom: "var(--space-xs)",
+            color: "var(--color-text-primary)",
+            margin: 0,
           }}
         >
-          {loading ? <CircularProgress size={24} color="inherit" /> : "Entrar"}
-        </Button>
-      </Box>
-    </Box>
+          💰 Finanças
+        </h2>
+
+        {error && (
+          <div
+            role="alert"
+            style={{
+              padding: "var(--space-xs) var(--space-sm)",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "color-mix(in srgb, var(--color-trading-down) 15%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--color-trading-down) 40%, transparent)",
+              color: "var(--color-trading-down)",
+              fontSize: "0.875rem",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-body)", display: "block", marginBottom: 4 }}>
+            Email
+          </label>
+          <input
+            type="email"
+            className="input input-bordered w-full"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            required
+            style={{ backgroundColor: "var(--color-surface-elevated)", color: "var(--color-text-primary)" }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-body)", display: "block", marginBottom: 4 }}>
+            Senha
+          </label>
+          <input
+            type="password"
+            className="input input-bordered w-full"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+            style={{ backgroundColor: "var(--color-surface-elevated)", color: "var(--color-text-primary)" }}
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn w-full"
+          style={{
+            backgroundColor: "var(--color-primary)",
+            color: "var(--color-on-primary)",
+            borderRadius: "var(--radius-md)",
+            border: "none",
+          }}
+        >
+          {loading ? <span className="loading loading-spinner loading-sm" /> : "Entrar"}
+        </button>
+      </form>
+    </div>
   );
 }

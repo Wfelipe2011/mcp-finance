@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Box, Paper, Typography } from "@mui/material";
 import { fetchCashflow, fetchPatrimonio, fetchRunway } from "../api/client.ts";
 import type { CashflowMensal, Digest, Patrimonio, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -11,12 +10,20 @@ import { formatBRL } from "../utils/format.ts";
 import { amountToTone } from "../utils/semanticTone.ts";
 import { MetricTooltip } from "../components/MetricTooltip.tsx";
 
-// Baseline de espaçamento interno (tasks 3.1–3.4):
-// - p dos Paper: var(--space-md)
-// - gap caption → valor (h3/h6): mt: "var(--space-xs)"
-// - gap valor → body2: mt: "var(--space-xs)"
-// - gap caption → componente filho: <Box sx={{ mt: "var(--space-xs)" }}>
-// - gap entre cards em stack: space-y-4 (Tailwind) — manter
+const cardStyle = {
+  borderRadius: "var(--radius-lg)",
+  padding: "var(--space-md)",
+  border: "1px solid var(--color-border-hairline)",
+  backgroundColor: "var(--color-surface-card)",
+};
+const captionStyle = {
+  fontSize: "0.75rem",
+  textTransform: "uppercase" as const,
+  letterSpacing: 0.9,
+  fontWeight: 600,
+  color: "var(--color-text-body)",
+};
+const captionMutedStyle = { ...captionStyle, letterSpacing: 0.8, color: "var(--color-muted-strong)" };
 
 export function Resumo({ month, digest }: { month: string; digest: Digest | null }) {
   const [cashflow, setCashflow] = useState<CashflowMensal | null>(null);
@@ -59,76 +66,51 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
 
   return (
     <div className="mt-4 space-y-4">
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
+      <div style={cardStyle}>
         <div style={{ display: "flex", alignItems: "center" }}>
-          <Typography
-            variant="caption"
-            sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
-          >
-            Resultado mensal
-          </Typography>
+          <p style={captionStyle}>Resultado mensal</p>
           <MetricTooltip title="Receitas reais menos despesas reais do mês. Exclui transferências entre contas e aportes em investimentos." />
         </div>
-        <Typography
+        <p
           data-testid="resumo-resultado"
-          variant="h3"
-          style={{ color: cashflowColor }}
-          sx={{
+          style={{
             fontWeight: 700,
-            mt: "var(--space-xs)",
+            marginTop: "var(--space-xs)",
             fontFamily: "var(--font-family-numeric)",
+            fontSize: "2rem",
             lineHeight: 1.1,
+            color: cashflowColor,
           }}
         >
           {formatBRL(cashflowReal)}
-        </Typography>
-        <Typography variant="body2" sx={{ color: "var(--color-muted)", mt: "var(--space-xs)" }}>
+        </p>
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", marginTop: "var(--space-xs)" }}>
           Receitas e despesas consolidadas do mês selecionado.
-        </Typography>
+        </p>
         <FlagPills flags={digest?.flags} />
-      </Paper>
+      </div>
 
       <DigestNarrative narrative={digest?.narrative_pt} />
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
+      <div style={cardStyle}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <div style={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-                Receitas
-              </Typography>
+              <p style={captionMutedStyle}>Receitas</p>
               <MetricTooltip title="Total de entradas de dinheiro no mês (salários, rendimentos, etc.). Transferências entre suas contas não são contadas." />
             </div>
-            <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-up)", fontFamily: "var(--font-family-numeric)" }}>
+            <p style={{ fontWeight: 700, marginTop: "var(--space-xs)", color: "var(--color-trading-up)", fontFamily: "var(--font-family-numeric)", fontSize: "1.15rem" }}>
               {formatBRL(receitas)}
-            </Typography>
+            </p>
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-                Despesas
-              </Typography>
+              <p style={captionMutedStyle}>Despesas</p>
               <MetricTooltip title="Total de saídas de dinheiro no mês (compras, contas, etc.). Transferências entre suas contas e aportes em investimentos não são contados." />
             </div>
-            <Typography variant="h6" sx={{ fontWeight: 700, mt: "var(--space-xs)", color: "var(--color-trading-down)", fontFamily: "var(--font-family-numeric)" }}>
+            <p style={{ fontWeight: 700, marginTop: "var(--space-xs)", color: "var(--color-trading-down)", fontFamily: "var(--font-family-numeric)", fontSize: "1.15rem" }}>
               {formatBRL(despesas)}
-            </Typography>
+            </p>
           </div>
           <div className="sm:col-span-2">
             {cashflow.total_emprestimos != null && cashflow.total_emprestimos > 0 ? (
@@ -149,53 +131,44 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
             <RunwayIndicator runway={runway} />
           </div>
         </div>
-      </Paper>
+      </div>
 
       {contasBanco.length > 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: "var(--radius-lg)",
-            p: "var(--space-md)",
-            border: "1px solid var(--color-border-hairline)",
-            bgcolor: "var(--color-surface-card)",
-          }}
-        >
-          <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.9 }}>
-            Patrimônio em conta
-          </Typography>
-          <Typography
-            variant="h5"
-            sx={{
+        <div style={cardStyle}>
+          <p style={captionMutedStyle}>Patrimônio em conta</p>
+          <p
+            style={{
               fontWeight: 700,
-              mt: "var(--space-xs)",
-              mb: "var(--space-sm)",
+              marginTop: "var(--space-xs)",
+              marginBottom: "var(--space-sm)",
               color: "var(--color-text-primary)",
               fontFamily: "var(--font-family-numeric)",
+              fontSize: "1.3rem",
             }}
           >
             {formatBRL(totalBanco)}
-          </Typography>
+          </p>
           {contasBanco.map((c) => (
-            <Box
+            <div
               key={c.account_id}
-              sx={{
+              style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                py: "var(--space-xxs)",
+                paddingTop: "var(--space-xxs)",
+                paddingBottom: "var(--space-xxs)",
                 borderTop: "1px solid var(--color-border-hairline)",
               }}
             >
-              <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>
+              <p style={{ fontSize: "0.875rem", color: "var(--color-text-body)", margin: 0 }}>
                 {c.banco ?? c.nome}{c.dono ? ` (${c.dono.split(" ")[0]})` : ""}
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)" }}>
+              </p>
+              <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)", margin: 0 }}>
                 {formatBRL(c.saldo_atual ?? 0)}
-              </Typography>
-            </Box>
+              </p>
+            </div>
           ))}
-        </Paper>
+        </div>
       )}
     </div>
   );

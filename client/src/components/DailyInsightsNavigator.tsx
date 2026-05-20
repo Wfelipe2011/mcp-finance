@@ -1,7 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { Box, Paper, Typography, IconButton, Chip, CircularProgress, Button } from "@mui/material";
-import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
-import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import { fetchMessagesRange, regenerateDailyInsight } from "../api/client.ts";
 import { DailyInsightCard } from "./DailyInsightCard.tsx";
 import type { MessagesRange, DailyInsight } from "../api/types.ts";
@@ -30,6 +27,25 @@ function isDayFuture(dateStr: string): boolean {
   return dateStr > new Date().toISOString().slice(0, 10);
 }
 
+function Badge({ label, color }: { label: string; color?: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        marginBottom: "var(--space-xs)",
+        borderRadius: "var(--radius-pill)",
+        padding: "1px 8px",
+        fontSize: "0.75rem",
+        backgroundColor: color ? `color-mix(in srgb, ${color} 18%, transparent)` : "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
+        color: color ?? "var(--color-text-body)",
+        border: `1px solid ${color ? `color-mix(in srgb, ${color} 35%, transparent)` : "var(--color-border-hairline)"}`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function MessageContent({ dateStr }: { dateStr: string }) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = dateStr === todayStr;
@@ -45,7 +61,7 @@ function MessageContent({ dateStr }: { dateStr: string }) {
     fetch(`/api/forecast/daily?date=${dateStr}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("authToken") ?? ""}` },
     })
-      .then(r => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data: DailyInsight | null) => setMsg(data))
       .catch(() => setMsg(null))
       .finally(() => setLoading(false));
@@ -57,8 +73,9 @@ function MessageContent({ dateStr }: { dateStr: string }) {
     try {
       const data = await regenerateDailyInsight();
       setMsg(data);
-    } catch (err: any) {
-      if (err?.status === 409) {
+    } catch (err: unknown) {
+      const e = err as { status?: number };
+      if (e?.status === 409) {
         setRegenError("Sem previsões disponíveis para hoje");
       } else {
         setRegenError("Erro ao regenerar. Tente novamente.");
@@ -68,49 +85,65 @@ function MessageContent({ dateStr }: { dateStr: string }) {
     }
   }
 
-  if (loading) return <CircularProgress size={20} />;
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-lg)" }}>
+        <span className="loading loading-spinner" style={{ color: "var(--color-primary)" }} />
+      </div>
+    );
+  }
 
   const past = isDayPast(dateStr);
   const future = isDayFuture(dateStr);
 
   return (
-    <Box>
-      {future && (
-        <Chip label="Previsão" size="small" sx={{ mb: 1, background: "color-mix(in srgb, #0288d1 18%, transparent)", color: "#0288d1" }} />
-      )}
-      {past && (
-        <Chip label="Histórico" size="small" sx={{ mb: 1 }} />
-      )}
-      {!past && !future && (
-        <Chip label="Hoje" size="small" sx={{ mb: 1, background: "color-mix(in srgb, #2e7d32 18%, transparent)", color: "#2e7d32" }} />
-      )}
+    <div>
+      {future && <Badge label="Previsão" color="#0288d1" />}
+      {past && <Badge label="Histórico" />}
+      {!past && !future && <Badge label="Hoje" color="#2e7d32" />}
 
       {msg ? (
         <DailyInsightCard insight={msg} />
       ) : (
-        <Typography variant="body2" color="text.secondary">
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)" }}>
           Sem mensagem disponível para este dia.
-        </Typography>
+        </p>
       )}
 
       {isToday && (
-        <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
-          <Button
-            size="small"
-            variant="outlined"
+        <div style={{ marginTop: "var(--space-xs)", display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
+          <button
+            type="button"
             disabled={regenerating}
             onClick={() => void handleRegenerate()}
+            style={{
+              padding: "4px 12px",
+              fontSize: "0.875rem",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-border-strong)",
+              background: "transparent",
+              color: "var(--color-text-primary)",
+              cursor: regenerating ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
           >
-            {regenerating ? <><CircularProgress size={16} /> Regenerando...</> : "Regerar"}
-          </Button>
+            {regenerating ? (
+              <>
+                <span className="loading loading-spinner" style={{ width: 14, height: 14 }} />
+                Regenerando...
+              </>
+            ) : "Regerar"}
+          </button>
           {regenError && (
-            <Typography variant="caption" sx={{ color: "var(--color-error, #d32f2f)" }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--color-trading-down)", margin: 0 }}>
               {regenError}
-            </Typography>
+            </p>
           )}
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -125,7 +158,7 @@ export default function DailyInsightsNavigator() {
       const r = await fetchMessagesRange();
       setRange(r);
       const todayStr = new Date().toISOString().slice(0, 10);
-      const todayIdx = r.dates.findIndex(d => d >= todayStr);
+      const todayIdx = r.dates.findIndex((d) => d >= todayStr);
       setCurrentIndex(todayIdx >= 0 ? todayIdx : Math.max(0, r.dates.length - 1));
     } catch {
       setRange({ dates: [] });
@@ -138,25 +171,27 @@ export default function DailyInsightsNavigator() {
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-        <CircularProgress />
-      </Box>
+      <div style={{ display: "flex", justifyContent: "center", padding: "var(--space-xl)" }}>
+        <span className="loading loading-spinner" style={{ color: "var(--color-primary)" }} />
+      </div>
     );
   }
 
   if (!range || range.dates.length === 0) {
     return (
-      <Paper elevation={0} sx={{
-        p: "var(--space-md)",
-        borderRadius: "var(--radius-lg)",
-        border: "1px solid var(--color-border-hairline)",
-        bgcolor: "var(--color-surface-card)",
-        textAlign: "center",
-      }}>
-        <Typography variant="body2" color="text.secondary">
+      <div
+        style={{
+          padding: "var(--space-md)",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid var(--color-border-hairline)",
+          backgroundColor: "var(--color-surface-card)",
+          textAlign: "center",
+        }}
+      >
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
           Nenhuma mensagem IA disponível ainda. Ative um modelo para gerar insights.
-        </Typography>
-      </Paper>
+        </p>
+      </div>
     );
   }
 
@@ -164,41 +199,61 @@ export default function DailyInsightsNavigator() {
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === range.dates.length - 1;
 
+  const btnStyle = (disabled: boolean) => ({
+    width: 30,
+    height: 30,
+    borderRadius: "50%",
+    border: "1px solid var(--color-border-hairline)",
+    background: "var(--color-surface-card)",
+    color: disabled ? "var(--color-muted)" : "var(--color-text-primary)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.5 : 1,
+    fontSize: 18,
+  });
+
   return (
-    <Paper elevation={0} sx={{
-      p: "var(--space-md)",
-      borderRadius: "var(--radius-lg)",
-      border: "1px solid var(--color-border-hairline)",
-      bgcolor: "var(--color-surface-card)",
-    }}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-        <IconButton
-          onClick={() => setCurrentIndex(i => i - 1)}
+    <div
+      style={{
+        padding: "var(--space-md)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--color-border-hairline)",
+        backgroundColor: "var(--color-surface-card)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-sm)" }}>
+        <button
+          type="button"
+          style={btnStyle(isFirst)}
+          onClick={() => setCurrentIndex((i) => i - 1)}
           disabled={isFirst}
-          size="small"
+          aria-label="Dia anterior"
         >
-          <ChevronLeftRoundedIcon />
-        </IconButton>
+          ‹
+        </button>
 
-        <Typography variant="subtitle1" fontWeight={600}>
+        <p style={{ fontWeight: 600, fontSize: "1rem", margin: 0 }}>
           {formatDateLabel(currentDate)}
-        </Typography>
+        </p>
 
-        <IconButton
-          onClick={() => setCurrentIndex(i => i + 1)}
+        <button
+          type="button"
+          style={btnStyle(isLast)}
+          onClick={() => setCurrentIndex((i) => i + 1)}
           disabled={isLast}
-          size="small"
+          aria-label="Próximo dia"
         >
-          <ChevronRightRoundedIcon />
-        </IconButton>
-      </Box>
+          ›
+        </button>
+      </div>
 
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", mb: 2 }}>
+      <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", textAlign: "center", marginBottom: "var(--space-sm)" }}>
         {currentIndex + 1} / {range.dates.length}
-      </Typography>
+      </p>
 
       <MessageContent dateStr={currentDate} />
-    </Paper>
+    </div>
   );
 }
-

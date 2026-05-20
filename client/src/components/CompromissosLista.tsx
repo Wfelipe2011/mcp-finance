@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Button, LinearProgress, Typography } from "@mui/material";
 import type { Compromisso } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -10,9 +9,9 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
 
   if (compromissos.length === 0) {
     return (
-      <Typography variant="body2" color="text.disabled" fontStyle="italic" sx={{ mt: 1 }}>
+      <p style={{ marginTop: "var(--space-xs)", color: "var(--color-muted)", fontStyle: "italic", fontSize: "0.875rem" }}>
         Sem parcelas em aberto.
-      </Typography>
+      </p>
     );
   }
 
@@ -20,10 +19,10 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
 
   return (
     <div className="mt-3 space-y-3">
-      <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>
+      <p style={{ color: "var(--color-text-body)", fontSize: "0.875rem", margin: 0 }}>
         Total comprometido:{" "}
         <strong style={{ color: "inherit" }}>{formatBRL(total)}</strong> restante
-      </Typography>
+      </p>
       {displayed.map((c, i) => {
         const progress = Math.round((c.installment_atual / c.total_installments) * 100);
         return (
@@ -36,7 +35,7 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
             }}
           >
             <div className="flex justify-between items-start">
-              <Typography variant="body2" noWrap sx={{ maxWidth: "65%" }}>{c.description}</Typography>
+              <p style={{ fontSize: "0.875rem", margin: 0, maxWidth: "65%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.description}</p>
               <span
                 style={{
                   border: "1px solid var(--color-border-hairline)",
@@ -50,27 +49,30 @@ export function CompromissosLista({ compromissos, total }: { compromissos: Compr
                 {c.installment_atual}/{c.total_installments}
               </span>
             </div>
-            <LinearProgress
-              variant="determinate"
-              value={progress}
-              color="primary"
-              sx={{ borderRadius: "var(--radius-pill)", height: 7 }}
-            />
-            <Typography variant="caption" color="text.secondary">
+            <div style={{ height: 7, borderRadius: "var(--radius-pill)", backgroundColor: "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)" }}>
+              <div style={{ height: "100%", width: `${progress}%`, borderRadius: "inherit", backgroundColor: "var(--color-primary)" }} />
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>
               {formatBRL(c.compromisso_restante)} restante · {c.dono} · {c.cartao}
-            </Typography>
+            </p>
           </div>
         );
       })}
       {compromissos.length > PREVIEW_COUNT && (
-        <Button
-          size="small"
-          variant="text"
+        <button
+          type="button"
           onClick={() => setShowAll((v) => !v)}
-          sx={{ p: 0, minWidth: 0 }}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--color-primary)",
+            cursor: "pointer",
+            fontSize: "0.875rem",
+            padding: 0,
+          }}
         >
-          {showAll ? "ver menos ↑" : `ver todos (${compromissos.length}) ↓`}
-        </Button>
+          {showAll ? "Ver menos ↑" : `Ver mais ${compromissos.length - PREVIEW_COUNT} ↓`}
+        </button>
       )}
     </div>
   );

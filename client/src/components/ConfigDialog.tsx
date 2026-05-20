@@ -1,16 +1,4 @@
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  IconButton,
-  Typography,
-  Box,
-  TextField,
-  CircularProgress,
-} from "@mui/material";
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import { fetchUsers, updateUserDisplayName } from "../api/client.ts";
 import type { User } from "../api/types.ts";
 
@@ -26,11 +14,13 @@ export function ConfigDialog({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    fetchUsers().then((u) => {
-      setUsers(u);
-      setDrafts(Object.fromEntries(u.map((user) => [user.id, user.display_name])));
-      setSaving(Object.fromEntries(u.map((user) => [user.id, "idle"])));
-    }).catch(() => {});
+    fetchUsers()
+      .then((u) => {
+        setUsers(u);
+        setDrafts(Object.fromEntries(u.map((user) => [user.id, user.display_name])));
+        setSaving(Object.fromEntries(u.map((user) => [user.id, "idle"])));
+      })
+      .catch(() => {});
   }, [open]);
 
   async function handleSave(user: User) {
@@ -48,67 +38,108 @@ export function ConfigDialog({ open, onClose }: Props) {
     }
   }
 
+  if (!open) return null;
+
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      PaperProps={{
-        sx: {
-          bgcolor: "var(--color-surface-card)",
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.5)",
+        padding: "var(--space-md)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Configurações"
+        style={{
+          width: "100%",
+          maxWidth: 480,
+          backgroundColor: "var(--color-surface-card)",
           border: "1px solid var(--color-border-hairline)",
           borderRadius: "var(--radius-xl)",
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          color: "var(--color-text-primary)",
-          fontWeight: 700,
+          padding: "var(--space-md)",
+          maxHeight: "90vh",
+          overflowY: "auto",
         }}
       >
-        ⚙️ Configurações
-        <IconButton onClick={onClose} size="small" aria-label="Fechar configurações">
-          <CloseRoundedIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent>
-        <Typography variant="subtitle2" sx={{ color: "var(--color-text-body)", mb: "var(--space-sm)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
+          <h3 style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--color-text-primary)", margin: 0 }}>
+            ⚙️ Configurações
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar configurações"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              border: "1px solid var(--color-border-hairline)",
+              background: "var(--color-surface-card)",
+              color: "var(--color-text-primary)",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 16,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-body)", marginBottom: "var(--space-sm)" }}>
           Membros
-        </Typography>
+        </p>
+
         {users.map((user) => (
-          <Box key={user.id} sx={{ mb: "var(--space-sm)" }}>
-            <Typography variant="caption" sx={{ color: "var(--color-text-body)" }}>
+          <div key={user.id} style={{ marginBottom: "var(--space-sm)" }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--color-text-body)", margin: 0, marginBottom: 4 }}>
               {user.name}
-            </Typography>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 0.5 }}>
-              <TextField
-                size="small"
-                label="Nome exibido"
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="text"
+                className="input input-sm input-bordered flex-1"
+                placeholder="Nome exibido"
                 value={drafts[user.id] ?? user.display_name}
                 onChange={(e) => setDrafts((d) => ({ ...d, [user.id]: e.target.value }))}
-                fullWidth
+                style={{ backgroundColor: "var(--color-surface-elevated)", color: "var(--color-text-primary)" }}
               />
-              <IconButton
+              <button
+                type="button"
                 onClick={() => void handleSave(user)}
                 disabled={saving[user.id] === "loading"}
-                color={saving[user.id] === "success" ? "success" : saving[user.id] === "error" ? "error" : "default"}
-                size="small"
+                title="Salvar"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: "50%",
+                  border: "1px solid var(--color-border-hairline)",
+                  background: saving[user.id] === "success" ? "color-mix(in srgb, var(--color-trading-up) 20%, var(--color-surface-card))" : "var(--color-surface-card)",
+                  color: saving[user.id] === "error" ? "var(--color-trading-down)" : saving[user.id] === "success" ? "var(--color-trading-up)" : "var(--color-text-primary)",
+                  cursor: saving[user.id] === "loading" ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                }}
               >
                 {saving[user.id] === "loading" ? (
-                  <CircularProgress size={18} />
-                ) : (
-                  <CheckRoundedIcon />
-                )}
-              </IconButton>
-            </Box>
-          </Box>
+                  <span className="loading loading-spinner" style={{ width: 14, height: 14 }} />
+                ) : "✓"}
+              </button>
+            </div>
+          </div>
         ))}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

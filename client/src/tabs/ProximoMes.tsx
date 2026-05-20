@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Box, Paper, Typography } from "@mui/material";
 import { fetchCashflowProjetado, fetchCompromissos, fetchRunway } from "../api/client.ts";
 import type { CashflowProjetado, Compromisso, Runway } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -10,11 +9,12 @@ import { CompromissosLista } from "../components/CompromissosLista.tsx";
 import { formatBRL } from "../utils/format.ts";
 import { amountToTone } from "../utils/semanticTone.ts";
 
-// Baseline de espaçamento interno (tasks 3.1–3.4):
-// - p dos Paper: var(--space-md)
-// - gap caption → valor (h3/h5): mt: "var(--space-xs)"
-// - gap caption → componente filho: <Box sx={{ mt: "var(--space-xs)" }}>
-// - gap entre cards em stack: space-y-4 (Tailwind) — manter
+const cardStyle = {
+  borderRadius: "var(--radius-lg)",
+  padding: "var(--space-md)",
+  border: "1px solid var(--color-border-hairline)",
+  backgroundColor: "var(--color-surface-card)",
+};
 
 export function ProximoMes() {
   const [projetado, setProjetado] = useState<CashflowProjetado[]>([]);
@@ -47,112 +47,83 @@ export function ProximoMes() {
   if (error) return <ErrorCard message={error} />;
 
   const totalComprometido = compromissos.reduce((sum, c) => sum + c.compromisso_restante, 0);
-  const latestProjected = [...projetado]
-    .reverse()
-    .find((row) => row.is_projected && row.saldo_liquido !== null)?.saldo_liquido
-    ?? [...projetado].reverse().find((row) => row.saldo_liquido !== null)?.saldo_liquido
-    ?? 0;
+  const latestProjected =
+    [...projetado].reverse().find((row) => row.is_projected && row.saldo_liquido !== null)?.saldo_liquido ??
+    [...projetado].reverse().find((row) => row.saldo_liquido !== null)?.saldo_liquido ??
+    0;
   const projectionTone = amountToTone(latestProjected);
   const projectionColor = projectionTone === "negative" ? "var(--color-trading-down)" : "var(--color-trading-up)";
 
   return (
     <div className="mt-4 space-y-4">
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
-        >
+      <div style={cardStyle}>
+        <p style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600, color: "var(--color-text-body)", margin: 0 }}>
           Próximo mês
-        </Typography>
+        </p>
         <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Typography variant="body2" sx={{ color: "var(--color-muted)" }}>
+            <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
               Projeção de cashflow
-            </Typography>
-            <Typography
+            </p>
+            <p
               data-testid="proximo-mes-kpi-projecao"
               data-tone={projectionTone}
-              variant="h3"
-              sx={{
+              style={{
                 color: projectionColor,
                 fontWeight: 700,
-                mt: "var(--space-xs)",
+                marginTop: "var(--space-xs)",
                 fontFamily: "var(--font-family-numeric)",
+                fontSize: "2rem",
                 lineHeight: 1.1,
               }}
             >
               {formatBRL(latestProjected)}
-            </Typography>
+            </p>
           </div>
           <div>
-            <Typography data-testid="proximo-mes-compromissos-title" variant="body2" sx={{ color: "var(--color-muted)" }}>
+            <p data-testid="proximo-mes-compromissos-title" style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
               Compromissos em aberto
-            </Typography>
-            <Typography
+            </p>
+            <p
               data-testid="proximo-mes-kpi-compromissos"
-              variant="h5"
-              sx={{
+              style={{
                 color: "var(--color-text-primary)",
                 fontWeight: 700,
-                mt: "var(--space-xs)",
+                marginTop: "var(--space-xs)",
                 fontFamily: "var(--font-family-numeric)",
+                fontSize: "1.4rem",
                 lineHeight: 1.1,
               }}
             >
               {formatBRL(totalComprometido)}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "var(--color-muted)" }}>
+            </p>
+            <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>
               {compromissos.length} compromisso(s) ativo(s)
-            </Typography>
+            </p>
           </div>
         </div>
         <div className="mt-4">
           <RunwayIndicator runway={runway} />
         </div>
-      </Paper>
+      </div>
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+      <div style={cardStyle}>
+        <p style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 600, color: "var(--color-muted-strong)", margin: 0 }}>
           Evolução do cashflow
-        </Typography>
-        <Box sx={{ mt: "var(--space-xs)" }}>
+        </p>
+        <div style={{ marginTop: "var(--space-xs)" }}>
           <CashflowAreaChart data={projetado} />
-        </Box>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
+      <div style={cardStyle}>
+        <p style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: 0.8, fontWeight: 600, color: "var(--color-muted-strong)", margin: 0 }}>
           Compromissos em aberto
-        </Typography>
-        <Box sx={{ mt: "var(--space-xs)" }}>
+        </p>
+        <div style={{ marginTop: "var(--space-xs)" }}>
           <CompromissosLista compromissos={compromissos} total={totalComprometido} />
-        </Box>
-      </Paper>
-
+        </div>
+      </div>
     </div>
   );
 }

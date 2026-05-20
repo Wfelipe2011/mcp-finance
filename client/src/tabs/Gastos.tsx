@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Box, Paper, Typography } from "@mui/material";
 import { fetchGastos, fetchTendencias } from "../api/client.ts";
 import type { GastosMensais, Tendencias } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -11,12 +10,21 @@ import { TendenciasGrupos } from "../components/TendenciasGrupos.tsx";
 import { TendenciasRecorrentes } from "../components/TendenciasRecorrentes.tsx";
 import { formatBRL } from "../utils/format.ts";
 
-// Baseline de espaçamento interno (tasks 3.1–3.4):
-// - p dos Paper: var(--space-md)
-// - gap caption → valor (h3): mt: "var(--space-xs)"
-// - gap valor → body2: mt: "var(--space-xs)"
-// - gap caption → componente filho: <Box sx={{ mt: "var(--space-xs)" }}>
-// - gap entre cards em stack: space-y-4 (Tailwind) — manter
+const cardStyle = {
+  borderRadius: "var(--radius-lg)",
+  padding: "var(--space-md)",
+  border: "1px solid var(--color-border-hairline)",
+  backgroundColor: "var(--color-surface-card)",
+};
+const captionStyle = {
+  fontSize: "0.75rem",
+  textTransform: "uppercase" as const,
+  letterSpacing: 0.9,
+  fontWeight: 600,
+  color: "var(--color-text-body)",
+  margin: 0,
+};
+const captionMutedStyle = { ...captionStyle, letterSpacing: 0.8, color: "var(--color-muted-strong)" };
 
 export function Gastos({ month }: { month: string }) {
   const [data, setData] = useState<GastosMensais | null>(null);
@@ -46,128 +54,67 @@ export function Gastos({ month }: { month: string }) {
 
   return (
     <div className="mt-4 space-y-4">
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{ color: "var(--color-text-body)", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
-        >
-          Total Gasto
-        </Typography>
-        <Typography
+      <div style={cardStyle}>
+        <p style={captionStyle}>Total Gasto</p>
+        <p
           data-testid="gastos-total"
           data-tone="negative"
-          variant="h3"
-          sx={{
+          style={{
             color: "var(--color-trading-down)",
             fontWeight: 700,
-            mt: "var(--space-xs)",
+            marginTop: "var(--space-xs)",
             fontFamily: "var(--font-family-numeric)",
+            fontSize: "2rem",
             lineHeight: 1.1,
+            margin: 0,
+            marginBlockStart: "var(--space-xs)",
           }}
         >
           {formatBRL(totalGasto)}
-        </Typography>
-        <Typography variant="body2" sx={{ color: "var(--color-muted)", mt: "var(--space-xs)" }}>
+        </p>
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", marginTop: "var(--space-xs)" }}>
           Consolidado dos grupos para o mês selecionado.
-        </Typography>
-      </Paper>
+        </p>
+      </div>
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-          Por onde foi
-        </Typography>
-        <Box sx={{ mt: "var(--space-xs)" }}>
+      <div style={cardStyle}>
+        <p style={captionMutedStyle}>Por onde foi</p>
+        <div style={{ marginTop: "var(--space-xs)" }}>
           <GruposDonut grupos={data.grupos} />
-        </Box>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-          Por categoria
-        </Typography>
-        <Box sx={{ mt: "var(--space-xs)" }}>
+      <div style={cardStyle}>
+        <p style={captionMutedStyle}>Por categoria</p>
+        <div style={{ marginTop: "var(--space-xs)" }}>
           <CategoriaBarList categorias={data.categorias} />
-        </Box>
-      </Paper>
+        </div>
+      </div>
 
       {data.novos.length > 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: "var(--radius-lg)",
-            p: "var(--space-md)",
-            border: "1px solid var(--color-border-hairline)",
-            bgcolor: "var(--color-surface-card)",
-          }}
-        >
-          <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-            Novos este mês
-          </Typography>
-          <Box sx={{ mt: "var(--space-xs)" }}>
+        <div style={cardStyle}>
+          <p style={captionMutedStyle}>Novos este mês</p>
+          <div style={{ marginTop: "var(--space-xs)" }}>
             <NovosGastos novos={data.novos} />
-          </Box>
-        </Paper>
+          </div>
+        </div>
       )}
 
       {tendencias && (
         <>
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: "var(--radius-lg)",
-              p: "var(--space-md)",
-              border: "1px solid var(--color-border-hairline)",
-              bgcolor: "var(--color-surface-card)",
-            }}
-          >
-            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-              Média 3 meses
-            </Typography>
-            <Box sx={{ mt: "var(--space-xs)" }}>
+          <div style={cardStyle}>
+            <p style={captionMutedStyle}>Média 3 meses</p>
+            <div style={{ marginTop: "var(--space-xs)" }}>
               <TendenciasGrupos grupos={tendencias.grupos} />
-            </Box>
-          </Paper>
+            </div>
+          </div>
 
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: "var(--radius-lg)",
-              p: "var(--space-md)",
-              border: "1px solid var(--color-border-hairline)",
-              bgcolor: "var(--color-surface-card)",
-            }}
-          >
-            <Typography variant="caption" sx={{ color: "var(--color-muted-strong)", textTransform: "uppercase", letterSpacing: 0.8 }}>
-              Recorrentes identificados
-            </Typography>
-            <Box sx={{ mt: "var(--space-xs)" }}>
+          <div style={cardStyle}>
+            <p style={captionMutedStyle}>Recorrentes identificados</p>
+            <div style={{ marginTop: "var(--space-xs)" }}>
               <TendenciasRecorrentes recorrentes={tendencias.recorrentes} />
-            </Box>
-          </Paper>
+            </div>
+          </div>
         </>
       )}
     </div>

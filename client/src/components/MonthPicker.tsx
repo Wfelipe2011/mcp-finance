@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { FormControl, MenuItem, Select } from "@mui/material";
-import type { SelectChangeEvent } from "@mui/material";
 import { fetchMeses } from "../api/client.ts";
 
 interface MonthPickerProps {
@@ -21,29 +19,22 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
   }, []);
 
   return (
-    <FormControl size="small" fullWidth variant="outlined">
-      <Select
-        value={value}
-        onChange={(e: SelectChangeEvent) => onChange(e.target.value)}
-        displayEmpty
-        sx={{
-          bgcolor: "var(--color-surface-strong)",
-          borderRadius: "var(--radius-lg)",
-          color: "var(--color-text-primary)",
-        }}
-      >
-        {meses.map((m) => (
-          <MenuItem
-            key={m}
-            value={m}
-            sx={{
-              color: "var(--color-text-primary)",
-            }}
-          >
-            {m}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="select select-sm select-bordered"
+      style={{
+        backgroundColor: "var(--color-surface-strong)",
+        borderRadius: "var(--radius-lg)",
+        color: "var(--color-text-primary)",
+        minWidth: 140,
+      }}
+    >
+      {meses.map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      ))}
+    </select>
   );
 }

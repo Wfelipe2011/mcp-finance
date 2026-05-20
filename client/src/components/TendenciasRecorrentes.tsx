@@ -1,4 +1,3 @@
-import { Box, Chip, Typography } from "@mui/material";
 import type { RecorrenteAI } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -9,51 +8,52 @@ interface Props {
 export function TendenciasRecorrentes({ recorrentes }: Props) {
   if (recorrentes.length === 0) {
     return (
-      <Typography variant="body2" sx={{ color: "var(--color-muted)" }}>
+      <p style={{ color: "var(--color-muted)", fontSize: "0.875rem", margin: 0 }}>
         Dados insuficientes — execute o enriquecimento AI para identificar recorrentes.
-      </Typography>
+      </p>
     );
   }
   return (
-    <Box sx={{ mt: "var(--space-sm)" }}>
+    <div style={{ marginTop: "var(--space-sm)" }}>
       {recorrentes.map((r, index) => (
-        <Box
+        <div
           key={`${r.merchant_name}-${r.category_group_pt}-${index}`}
-          sx={{
+          style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            py: "var(--space-sm)",
-            px: "var(--space-sm)",
+            padding: "var(--space-sm)",
             border: "1px solid var(--color-border-hairline)",
             borderRadius: "var(--radius-lg)",
-            mb: "var(--space-xs)",
-            bgcolor: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent)",
+            marginBottom: "var(--space-xs)",
+            backgroundColor: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent)",
           }}
         >
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: "var(--color-text-body)" }}>{r.merchant_name}</Typography>
-            <Typography variant="caption" sx={{ color: "var(--color-muted)" }}>{r.category_group_pt}</Typography>
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)" }}>
+          <div>
+            <p style={{ fontWeight: 500, color: "var(--color-text-body)", fontSize: "0.875rem", margin: 0 }}>{r.merchant_name}</p>
+            <p style={{ color: "var(--color-muted)", fontSize: "0.75rem", margin: 0 }}>{r.category_group_pt}</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)", fontSize: "0.875rem", margin: 0 }}>
               {formatBRL(r.media_valor)}
-            </Typography>
+            </p>
             {r.recurrence_period && (
-              <Chip
-                label={r.recurrence_period}
-                size="small"
-                variant="outlined"
-                sx={{
-                  borderColor: "var(--color-border-hairline)",
+              <span
+                style={{
+                  border: "1px solid var(--color-border-hairline)",
+                  borderRadius: "var(--radius-pill)",
+                  padding: "1px 6px",
+                  fontSize: "0.75rem",
                   color: "var(--color-text-body)",
-                  bgcolor: "color-mix(in srgb, var(--color-surface-strong) 60%, transparent)",
+                  backgroundColor: "color-mix(in srgb, var(--color-surface-strong) 60%, transparent)",
                 }}
-              />
+              >
+                {r.recurrence_period}
+              </span>
             )}
-          </Box>
-        </Box>
+          </div>
+        </div>
       ))}
-    </Box>
+    </div>
   );
 }

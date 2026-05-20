@@ -1,39 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
-import {
-  BottomNavigation,
-  BottomNavigationAction,
-  Paper,
-  Box,
-  IconButton,
-  Typography,
-  ThemeProvider,
-  CssBaseline,
-  CircularProgress,
-  Snackbar,
-  Alert,
-} from "@mui/material";
-import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
-import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
-import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
-import ShowChartRoundedIcon from "@mui/icons-material/ShowChartRounded";
-import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
-import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
-import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
-import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import { useState, useEffect } from "react";
 import { MonthPicker } from "./components/MonthPicker.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { ConfigDialog } from "./components/ConfigDialog.tsx";
-import { ChatWidget } from "./components/ChatWidget.tsx";
 import { Resumo } from "./tabs/Resumo.tsx";
 import { Gastos } from "./tabs/Gastos.tsx";
 import { ProximoMes } from "./tabs/ProximoMes.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
-import { Insights } from "./tabs/Insights.tsx";
 import IaScreen from "./tabs/IaScreen.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
-import { createAppTheme, type AppColorMode } from "./theme.ts";
+import type { AppColorMode } from "./theme.ts";
 
 function isTokenValid(token: string): boolean {
   try {
@@ -45,43 +21,48 @@ function isTokenValid(token: string): boolean {
   } catch {
     return false;
   }
-
 }
 
-// Altura total da tabbar fixa (Paper bottom + BottomNavigation minHeight) + margem
-const TABBAR_HEIGHT = 68;
+type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia";
+
+const NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
+  { id: "resumo", label: "Resumo", icon: "🏠" },
+  { id: "gastos", label: "Gastos", icon: "🧾" },
+  { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
+  { id: "investimentos", label: "Investimentos", icon: "📈" },
+  { id: "ia", label: "IA", icon: "✨" },
+];
 
 export function App() {
   const [authToken, setAuthToken] = useState<string | null>(
     localStorage.getItem("authToken")
   );
-
   const [selectedMonth, setSelectedMonth] = useState(
     localStorage.getItem("selectedMonth") ?? ""
   );
   const [digest, setDigest] = useState<Digest | null>(null);
   const [meses, setMeses] = useState<string[]>([]);
-
-  const handleMonthChange = (month: string) => {
-    localStorage.setItem("selectedMonth", month);
-    setSelectedMonth(month);
-  };
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState<TabId>("resumo");
   const [colorMode, setColorMode] = useState<AppColorMode>(
     (localStorage.getItem("colorMode") as AppColorMode) ?? "light"
   );
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
-  const [snackOpen, setSnackOpen] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+
+  void meses;
+
+  const handleMonthChange = (month: string) => {
+    localStorage.setItem("selectedMonth", month);
+    setSelectedMonth(month);
+  };
 
   const toggleColorMode = () => {
     const nextMode = colorMode === "light" ? "dark" : "light";
     setColorMode(nextMode);
     localStorage.setItem("colorMode", nextMode);
   };
-
-  const theme = useMemo(() => createAppTheme(colorMode), [colorMode]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -111,8 +92,7 @@ export function App() {
       const secs = (summary.durationMs / 1000).toFixed(1);
       setSyncMessage(`Sincronizado: ${summary.transactions} transações em ${secs}s`);
       setSyncState("success");
-      setSnackOpen(true);
-      // Refresh months list
+      setToastVisible(true);
       const newMeses = await fetchMeses();
       setMeses(newMeses);
       if (newMeses.length > 0 && !newMeses.includes(selectedMonth)) {
@@ -121,159 +101,257 @@ export function App() {
     } catch (err) {
       setSyncMessage(`Erro no sync: ${err instanceof Error ? err.message : String(err)}`);
       setSyncState("error");
-      setSnackOpen(true);
+      setToastVisible(true);
     } finally {
-      setTimeout(() => setSyncState("idle"), syncState === "error" ? 3000 : 2000);
+      setTimeout(() => {
+        setSyncState("idle");
+        setToastVisible(false);
+      }, syncState === "error" ? 4000 : 3000);
     }
   }
 
-  void meses; // used via setMeses for refresh
-
-  // Show login screen if no valid token
   if (!authToken || !isTokenValid(authToken)) {
     return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <LoginScreen
-          onLogin={(token) => {
-            localStorage.setItem("authToken", token);
-            setAuthToken(token);
-          }}
-        />
-      </ThemeProvider>
+      <LoginScreen
+        onLogin={(token) => {
+          localStorage.setItem("authToken", token);
+          setAuthToken(token);
+        }}
+      />
     );
   }
 
-  const tabs = [
-    selectedMonth ? <Resumo month={selectedMonth} digest={digest} /> : null,
-    selectedMonth ? <Gastos month={selectedMonth} /> : null,
-    <ProximoMes />,
-    selectedMonth ? <Investimentos month={selectedMonth} /> : null,
-    selectedMonth ? <Insights month={selectedMonth} digest={digest} /> : null,
-    <IaScreen />,
-  ];
+  function renderTab() {
+    switch (activeTab) {
+      case "resumo":
+        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} /> : null;
+      case "gastos":
+        return selectedMonth ? <Gastos month={selectedMonth} /> : null;
+      case "proximo-mes":
+        return <ProximoMes />;
+      case "investimentos":
+        return selectedMonth ? <Investimentos month={selectedMonth} /> : null;
+      case "ia":
+        return <IaScreen />;
+      default:
+        return null;
+    }
+  }
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box
-        sx={{
-          width: "100%",
-          maxWidth: 560,
-          marginLeft: "auto",
-          marginRight: "auto",
-          minHeight: "100vh",
-          boxSizing: "border-box",
-          backgroundColor: "var(--color-canvas)",
-          paddingLeft: "var(--space-sm)",
-          paddingRight: "var(--space-sm)",
-          paddingBottom: `calc(${TABBAR_HEIGHT}px + 8px + env(safe-area-inset-bottom, 0px))`,
-        }}
-      >
-        <Box
-          component="header"
-          sx={{
-            py: "var(--space-md)",
+    <div className="drawer lg:drawer-open min-h-screen" style={{ backgroundColor: "var(--color-canvas)" }}>
+      {/* Drawer toggle (mobile) */}
+      <input id="main-drawer" type="checkbox" className="drawer-toggle" />
+
+      {/* Drawer content */}
+      <div className="drawer-content flex flex-col">
+        {/* Header */}
+        <header
+          style={{
+            padding: "var(--space-md)",
             display: "flex",
             flexWrap: "wrap",
             justifyContent: "space-between",
             alignItems: "flex-start",
             gap: "var(--space-sm)",
+            borderBottom: "1px solid var(--color-border-hairline)",
           }}
         >
           <div>
-            <Typography
-              variant="h6"
-              fontWeight={700}
-              sx={{ color: "var(--color-text-primary)", lineHeight: 1.2 }}
+            {/* Hamburger (mobile) */}
+            <label
+              htmlFor="main-drawer"
+              className="btn btn-ghost btn-sm lg:hidden"
+              aria-label="Abrir menu"
+              style={{ marginBottom: "var(--space-xs)" }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: 20, height: 20 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </label>
+            <p
+              style={{
+                fontWeight: 700,
+                fontSize: "1.1rem",
+                color: "var(--color-text-primary)",
+                margin: 0,
+              }}
             >
               💰 Finanças Familiar
-            </Typography>
-            <div className="mt-3">
+            </p>
+            <div style={{ marginTop: "var(--space-xs)" }}>
               <MonthPicker value={selectedMonth} onChange={handleMonthChange} />
             </div>
           </div>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <IconButton
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              type="button"
               onClick={() => void handleSync()}
-              size="small"
               disabled={syncState === "loading"}
               title="Sincronizar dados"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                border: "1px solid var(--color-border-hairline)",
+                background: "var(--color-surface-card)",
+                color: syncState === "success" ? "var(--color-trading-up)" : syncState === "error" ? "var(--color-trading-down)" : "var(--color-text-primary)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: syncState === "loading" ? "not-allowed" : "pointer",
+                opacity: syncState === "loading" ? 0.55 : 1,
+                fontSize: 16,
+              }}
             >
               {syncState === "loading" ? (
-                <CircularProgress size={20} />
-              ) : (
-                <SyncRoundedIcon
-                  color={syncState === "success" ? "success" : syncState === "error" ? "error" : "inherit"}
-                />
-              )}
-            </IconButton>
-            <IconButton onClick={() => setConfigOpen(true)} size="small" title="Configurações">
-              <SettingsRoundedIcon />
-            </IconButton>
-            <IconButton onClick={toggleColorMode} size="small">
-              {colorMode === "dark" ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
-            </IconButton>
-          </Box>
-        </Box>
+                <span className="loading loading-spinner" style={{ width: 16, height: 16 }} />
+              ) : "🔄"}
+            </button>
 
-        <main style={{ overflowX: "hidden", minWidth: 0 }}>{tabs[activeTab]}</main>
+            <button
+              type="button"
+              onClick={() => setConfigOpen(true)}
+              title="Configurações"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                border: "1px solid var(--color-border-hairline)",
+                background: "var(--color-surface-card)",
+                color: "var(--color-text-primary)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 16,
+              }}
+            >
+              ⚙️
+            </button>
 
-        <Paper
-          sx={{
-            position: "fixed",
-            bottom: "var(--space-sm)",
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: "calc(100% - (var(--space-md) * 2))",
-            maxWidth: "calc(560px - (var(--space-md) * 2))",
-            borderRadius: "var(--radius-xl)",
-            border: "1px solid var(--color-border-hairline)",
-            backgroundColor: "var(--color-surface-card)",
-            overflow: "hidden",
-            paddingBottom: "env(safe-area-inset-bottom, 8px)",
+            <button
+              type="button"
+              onClick={toggleColorMode}
+              title="Alternar tema"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                border: "1px solid var(--color-border-hairline)",
+                background: "var(--color-surface-card)",
+                color: "var(--color-text-primary)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 16,
+              }}
+            >
+              {colorMode === "dark" ? "☀️" : "🌙"}
+            </button>
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main
+          style={{
+            flex: 1,
+            paddingLeft: "var(--space-sm)",
+            paddingRight: "var(--space-sm)",
+            paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+            minWidth: 0,
+            overflowX: "hidden",
           }}
-          elevation={0}
+          className="lg:pb-4"
         >
-          <BottomNavigation
-            aria-label="Navegação principal"
-            value={activeTab}
-            onChange={(_e, v: number) => setActiveTab(v)}
-            showLabels
-            sx={{
-              bgcolor: "transparent",
-              minHeight: 60,
+          {renderTab()}
+        </main>
+
+        {/* Dock (mobile only) */}
+        <div className="dock lg:hidden">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              className={activeTab === item.id ? "dock-active" : ""}
+            >
+              <span aria-hidden style={{ fontSize: 20 }}>{item.icon}</span>
+              <span className="dock-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Drawer side (desktop sidebar) */}
+      <div className="drawer-side" style={{ zIndex: 40 }}>
+        <label htmlFor="main-drawer" aria-label="Fechar menu" className="drawer-overlay" />
+        <nav
+          style={{
+            width: 220,
+            minHeight: "100%",
+            backgroundColor: "var(--color-surface-card)",
+            borderRight: "1px solid var(--color-border-hairline)",
+            display: "flex",
+            flexDirection: "column",
+            padding: "var(--space-md)",
+            gap: "var(--space-xs)",
+          }}
+        >
+          <p
+            style={{
+              fontWeight: 700,
+              fontSize: "1.1rem",
+              color: "var(--color-text-primary)",
+              marginBottom: "var(--space-md)",
             }}
           >
-            <BottomNavigationAction label="Resumo" icon={<HomeRoundedIcon />} />
-            <BottomNavigationAction label="Gastos" icon={<ReceiptLongRoundedIcon />} />
-            <BottomNavigationAction label="Próx. Mês" icon={<CalendarMonthRoundedIcon />} />
-            <BottomNavigationAction label="Investimentos" icon={<ShowChartRoundedIcon />} />
-            <BottomNavigationAction label="Insights" icon={<AutoAwesomeRoundedIcon />} />
-            <BottomNavigationAction label="IA" icon={<AutoAwesomeRoundedIcon />} />
-          </BottomNavigation>
-        </Paper>
-      </Box>
+            💰 Finanças
+          </p>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-sm)",
+                padding: "var(--space-xs) var(--space-sm)",
+                borderRadius: "var(--radius-lg)",
+                border: "none",
+                background: activeTab === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
+                color: activeTab === item.id ? "var(--color-primary)" : "var(--color-text-body)",
+                fontWeight: activeTab === item.id ? 700 : 400,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <span aria-hidden style={{ fontSize: 18 }}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      <Snackbar
-        open={snackOpen}
-        autoHideDuration={syncState === "error" ? 6000 : 4000}
-        onClose={() => setSnackOpen(false)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        sx={{ bottom: `calc(${TABBAR_HEIGHT}px + var(--space-sm))` }}
-      >
-        <Alert
-          onClose={() => setSnackOpen(false)}
-          severity={syncState === "error" ? "error" : "success"}
-          variant="filled"
-          sx={{ width: "100%" }}
-        >
-          {syncMessage}
-        </Alert>
-      </Snackbar>
+      {/* Toast notification */}
+      {toastVisible && (
+        <div className="toast toast-bottom toast-center" style={{ zIndex: 50 }}>
+          <div
+            role="alert"
+            className={`alert ${syncState === "error" ? "alert-error" : "alert-success"}`}
+            style={{ maxWidth: 360 }}
+          >
+            <span style={{ fontSize: "0.875rem" }}>{syncMessage}</span>
+          </div>
+        </div>
+      )}
 
       <ConfigDialog open={configOpen} onClose={() => setConfigOpen(false)} />
-      <ChatWidget />
-    </ThemeProvider>
+    </div>
   );
 }

@@ -1,27 +1,24 @@
 import { useState } from "react";
-import { Button, Paper, Typography } from "@mui/material";
 
 const PREVIEW_LENGTH = 200;
 
 export function DigestNarrative({ narrative }: { narrative: string | null | undefined }) {
   const [expanded, setExpanded] = useState(false);
 
+  const cardStyle = {
+    borderRadius: "var(--radius-lg)",
+    padding: "var(--space-md)",
+    marginTop: "var(--space-sm)",
+    border: "1px solid var(--color-border-hairline)",
+  };
+
   if (!narrative) {
     return (
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: "var(--radius-lg)",
-          p: "var(--space-md)",
-          mt: "var(--space-sm)",
-          border: "1px solid var(--color-border-hairline)",
-          bgcolor: "var(--color-surface-card)",
-        }}
-      >
-        <Typography variant="body2" sx={{ color: "var(--color-muted)", fontStyle: "italic" }}>
+      <div style={{ ...cardStyle, backgroundColor: "var(--color-surface-card)" }}>
+        <p style={{ color: "var(--color-muted)", fontStyle: "italic", fontSize: "0.875rem", margin: 0 }}>
           Análise de IA não disponível para este mês.
-        </Typography>
-      </Paper>
+        </p>
+      </div>
     );
   }
 
@@ -29,29 +26,32 @@ export function DigestNarrative({ narrative }: { narrative: string | null | unde
   const displayed = expanded || !isLong ? narrative : narrative.slice(0, PREVIEW_LENGTH) + "…";
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        borderRadius: "var(--radius-lg)",
-        p: "var(--space-md)",
-        mt: "var(--space-sm)",
-        border: "1px solid var(--color-border-hairline)",
-        bgcolor: "color-mix(in srgb, var(--color-accent-turquoise) 10%, var(--color-surface-card))",
+    <div
+      style={{
+        ...cardStyle,
+        backgroundColor: "color-mix(in srgb, var(--color-accent-turquoise) 10%, var(--color-surface-card))",
       }}
     >
-      <Typography variant="body1" sx={{ color: "var(--color-text-body)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+      <p style={{ color: "var(--color-text-body)", lineHeight: 1.65, whiteSpace: "pre-wrap", fontSize: "0.95rem", margin: 0 }}>
         {displayed}
-      </Typography>
+      </p>
       {isLong && (
-        <Button
-          size="small"
-          variant="text"
+        <button
+          type="button"
           onClick={() => setExpanded((v) => !v)}
-          sx={{ mt: "var(--space-xs)", p: 0, minWidth: 0, color: "var(--color-primary)" }}
+          style={{
+            marginTop: "var(--space-xs)",
+            background: "none",
+            border: "none",
+            color: "var(--color-primary)",
+            cursor: "pointer",
+            fontSize: "0.875rem",
+            padding: 0,
+          }}
         >
           {expanded ? "ver menos ↑" : "ver mais ↓"}
-        </Button>
+        </button>
       )}
-    </Paper>
+    </div>
   );
 }

@@ -1,4 +1,3 @@
-import { Typography } from "@mui/material";
 import type { Runway } from "../api/types.ts";
 import { MetricTooltip } from "./MetricTooltip.tsx";
 import { runwayDaysToTone, type SemanticTone } from "../utils/semanticTone.ts";
@@ -59,7 +58,7 @@ export function RunwayIndicator({ runway }: { runway: Runway | null }) {
     <div className="mt-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <div style={{ display: "flex", alignItems: "center" }}>
-          <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego imediato</Typography>
+          <p style={{ color: "var(--color-text-body)", fontSize: "0.875rem", margin: 0 }}>Fôlego imediato</p>
           <MetricTooltip title="Por quantos dias seu saldo em conta corrente/poupança sustenta seus gastos médios dos últimos 3 meses." />
         </div>
         <span
@@ -81,7 +80,7 @@ export function RunwayIndicator({ runway }: { runway: Runway | null }) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <div style={{ display: "flex", alignItems: "center" }}>
-          <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>Fôlego total</Typography>
+          <p style={{ color: "var(--color-text-body)", fontSize: "0.875rem", margin: 0 }}>Fôlego total</p>
           <MetricTooltip title="Por quantos dias seu saldo em conta corrente/poupança mais seus investimentos sustentam seus gastos médios dos últimos 3 meses." />
         </div>
         <span

@@ -12,7 +12,6 @@
     "test:visual": "playwright test"
   },
   "dependencies": {
-    "@tremor/react": "^3.18.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.4"
@@ -27,6 +26,7 @@
     "@types/react-test-renderer": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.2",
     "autoprefixer": "^10.4.21",
+    "daisyui": "^5.5.20",
     "happy-dom": "^20.9.0",
     "postcss": "^8.5.4",
     "react-test-renderer": "18.3.1",

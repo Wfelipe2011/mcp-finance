@@ -1,4 +1,3 @@
-import { Typography } from "@mui/material";
 import type { NotableExpense } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -30,10 +29,10 @@ export function NotableExpenses({ expenses }: { expenses: NotableExpense[] | nul
             }}
           />
           <div className="flex justify-between items-baseline">
-            <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: "70%" }}>{e.description}</Typography>
-            <Typography variant="body2" fontWeight={600}>{formatBRL(e.amount)}</Typography>
+            <p style={{ fontWeight: 500, fontSize: "0.875rem", margin: 0, maxWidth: "70%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description}</p>
+            <p style={{ fontWeight: 600, fontSize: "0.875rem", margin: 0 }}>{formatBRL(e.amount)}</p>
           </div>
-          <Typography variant="caption" color="text.secondary">{e.reason}</Typography>
+          <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>{e.reason}</p>
         </li>
       ))}
     </ul>

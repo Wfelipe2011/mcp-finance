@@ -1,5 +1,4 @@
-import { Box, Typography } from "@mui/material";
-import { PieChart } from "@mui/x-charts/PieChart";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { PatrimonioItem } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -30,25 +29,43 @@ export function PatrimonioDonut({ contas }: { contas: PatrimonioItem[] }) {
   if (data.length === 0) return null;
 
   return (
-    <Box>
-      <PieChart
-        series={[{
-          data,
-          innerRadius: 45,
-          valueFormatter: (item) => formatBRL(item.value),
-        }]}
-        height={160}
-        margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        slots={{ legend: () => null }}
-      />
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+    <div>
+      <div style={{ width: "100%", height: 160 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="label"
+              innerRadius={45}
+              outerRadius="88%"
+              paddingAngle={2}
+              isAnimationActive={false}
+            >
+              {data.map((entry) => (
+                <Cell key={entry.id} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                background: "var(--color-surface-card)",
+                border: "1px solid var(--color-border-hairline)",
+                borderRadius: "var(--radius-md)",
+                color: "var(--color-text-primary)",
+              }}
+              formatter={(value: number, name: string) => [formatBRL(value), name]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
         {data.map((item) => (
-          <Box key={item.id} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }} />
-            <Typography variant="caption" color="text.secondary">{item.label}</Typography>
-          </Box>
+          <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: item.color, flexShrink: 0 }} />
+            <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>{item.label}</p>
+          </div>
         ))}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

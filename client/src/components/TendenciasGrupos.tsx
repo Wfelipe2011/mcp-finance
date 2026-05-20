@@ -1,4 +1,3 @@
-import { Box, Typography, LinearProgress } from "@mui/material";
 import type { GrupoTendencia } from "../api/types.ts";
 import { formatBRL } from "../utils/format.ts";
 
@@ -6,13 +5,22 @@ interface Props {
   grupos: GrupoTendencia[];
 }
 
+function LinearProgress({ value, color = "primary" }: { value: number; color?: string }) {
+  const bg = color === "primary" ? "var(--color-primary)" : color;
+  return (
+    <div style={{ height: 7, borderRadius: "var(--radius-pill)", backgroundColor: "color-mix(in srgb, var(--color-surface-strong) 70%, transparent)" }}>
+      <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, value))}%`, borderRadius: "inherit", backgroundColor: bg, transition: "width 0.3s" }} />
+    </div>
+  );
+}
+
 export function TendenciasGrupos({ grupos }: Props) {
   if (grupos.length === 0) {
-    return <Typography variant="body2" sx={{ color: "var(--color-muted)" }}>Dados insuficientes.</Typography>;
+    return <p style={{ color: "var(--color-muted)", fontSize: "0.875rem", margin: 0 }}>Dados insuficientes.</p>;
   }
-  const max = Math.max(...grupos.map(g => g.media_mensal));
+  const max = Math.max(...grupos.map((g) => g.media_mensal));
   return (
-    <Box sx={{ mt: "var(--space-sm)" }}>
+    <div style={{ marginTop: "var(--space-sm)" }}>
       {grupos.map((g, index) => {
         const previous = grupos[index + 1]?.media_mensal ?? g.media_mensal;
         const isUp = g.media_mensal >= previous;
@@ -20,23 +28,23 @@ export function TendenciasGrupos({ grupos }: Props) {
         const trendIcon = isUp ? "↑" : "↓";
 
         return (
-          <Box
+          <div
             key={g.group_pt}
-            sx={{
-              mb: "var(--space-sm)",
+            style={{
+              marginBottom: "var(--space-sm)",
               border: "1px solid var(--color-border-hairline)",
               borderRadius: "var(--radius-lg)",
-              p: "var(--space-sm)",
-              bgcolor: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent)",
+              padding: "var(--space-sm)",
+              backgroundColor: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent)",
             }}
           >
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: "var(--space-xxs)", alignItems: "center" }}>
-              <Typography variant="body2" sx={{ color: "var(--color-text-body)" }}>{g.group_pt}</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "var(--space-xxs)", alignItems: "center" }}>
+              <p style={{ color: "var(--color-text-body)", fontSize: "0.875rem", margin: 0 }}>{g.group_pt}</p>
+              <p style={{ fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-family-numeric)", fontSize: "0.875rem", margin: 0 }}>
                 {formatBRL(g.media_mensal)}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", mb: "var(--space-xxs)" }}>
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", marginBottom: "var(--space-xxs)" }}>
               <span
                 data-testid={`tendencia-indicator-${g.group_pt}`}
                 data-tone={isUp ? "positive" : "negative"}
@@ -44,23 +52,14 @@ export function TendenciasGrupos({ grupos }: Props) {
               >
                 {trendIcon}
               </span>
-              <Typography variant="caption" sx={{ color: toneColor, fontWeight: 600 }}>
+              <span style={{ color: toneColor, fontWeight: 600, fontSize: "0.75rem" }}>
                 {isUp ? "Alta" : "Queda"}
-              </Typography>
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              color="primary"
-              value={(g.media_mensal / max) * 100}
-              sx={{
-                borderRadius: "var(--radius-pill)",
-                height: 7,
-                backgroundColor: "color-mix(in srgb, var(--color-surface-strong) 70%, transparent)",
-              }}
-            />
-          </Box>
+              </span>
+            </div>
+            <LinearProgress value={(g.media_mensal / max) * 100} />
+          </div>
         );
       })}
-    </Box>
+    </div>
   );
 }

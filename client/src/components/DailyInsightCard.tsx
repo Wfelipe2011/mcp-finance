@@ -1,4 +1,3 @@
-import { Box, Paper, Chip, Typography, LinearProgress } from "@mui/material";
 import type { DailyInsight } from "../api/types.ts";
 
 interface DailyInsightCardProps {
@@ -10,61 +9,71 @@ export function DailyInsightCard({ insight }: DailyInsightCardProps) {
   const probPct = Math.round(prob * 100);
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        mb: 2,
+    <div
+      style={{
+        marginBottom: "var(--space-md)",
         borderRadius: "var(--radius-lg)",
-        p: "var(--space-md)",
+        padding: "var(--space-md)",
         border: "1px solid var(--color-border-hairline)",
-        bgcolor: "var(--color-surface-card)",
+        backgroundColor: "var(--color-surface-card)",
       }}
     >
       {insight.category_pt && (
-        <Chip label={insight.category_pt} size="small" sx={{ mb: 1 }} />
+        <span
+          style={{
+            display: "inline-block",
+            marginBottom: "var(--space-xs)",
+            borderRadius: "var(--radius-pill)",
+            padding: "1px 8px",
+            fontSize: "0.75rem",
+            backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-card))",
+            color: "var(--color-primary)",
+            border: "1px solid color-mix(in srgb, var(--color-primary) 30%, transparent)",
+          }}
+        >
+          {insight.category_pt}
+        </span>
       )}
 
-      <Typography variant="body1" sx={{ mb: 1 }}>
+      <p style={{ marginBottom: "var(--space-xs)", fontSize: "0.95rem", lineHeight: 1.5, margin: 0 }}>
         {insight.message_pt}
-      </Typography>
+      </p>
 
       {insight.probability !== null && (
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+        <div style={{ marginBottom: "var(--space-xs)" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0, marginBottom: 4 }}>
             Probabilidade de gasto hoje: {probPct}%
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={probPct}
-            sx={{ mt: 0.5, height: 6, borderRadius: 3 }}
-          />
-        </Box>
+          </p>
+          <div style={{ height: 6, borderRadius: "var(--radius-pill)", backgroundColor: "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)" }}>
+            <div style={{ height: "100%", width: `${probPct}%`, borderRadius: "inherit", backgroundColor: "var(--color-primary)" }} />
+          </div>
+        </div>
       )}
 
       {insight.estimated_amount !== null && (
-        <Typography variant="body2" color="text.secondary">
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
           Estimativa: R$ {insight.estimated_amount.toFixed(2)}
           {insight.lower_bound !== null && insight.upper_bound !== null && (
             <span> (R$ {insight.lower_bound.toFixed(2)} – R$ {insight.upper_bound.toFixed(2)})</span>
           )}
-        </Typography>
+        </p>
       )}
 
       {insight.secondary_insights.length > 0 && (
-        <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+        <div style={{ marginTop: "var(--space-xs)" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", display: "block", marginBottom: "var(--space-xxs)" }}>
             Outras categorias prováveis hoje:
-          </Typography>
+          </p>
           {insight.secondary_insights.map((si) => (
-            <Box key={si.category_pt} sx={{ display: "flex", justifyContent: "space-between", py: 0.25 }}>
-              <Typography variant="caption">{si.category_pt}</Typography>
-              <Typography variant="caption" color="text.secondary">
+            <div key={si.category_pt} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+              <p style={{ fontSize: "0.75rem", margin: 0 }}>{si.category_pt}</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", margin: 0 }}>
                 {Math.round(si.probability * 100)}% · R$ {si.estimated_amount.toFixed(2)}
-              </Typography>
-            </Box>
+              </p>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 }

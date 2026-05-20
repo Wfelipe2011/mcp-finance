@@ -1,5 +1,4 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { Paper, Typography } from "@mui/material";
 import { fetchTransacoes } from "../api/client.ts";
 import type { Digest, Transacao } from "../api/types.ts";
 import { LoadingCard } from "../components/LoadingCard.tsx";
@@ -7,11 +6,6 @@ import { ErrorCard } from "../components/ErrorCard.tsx";
 import { FlagPills } from "../components/FlagPills.tsx";
 import { NotableExpenses } from "../components/NotableExpenses.tsx";
 import { AnomaliasList } from "../components/AnomaliasList.tsx";
-
-// Baseline de espaçamento interno (tasks 3.1–3.4):
-// - p dos Paper: var(--space-md)
-// - gap header (caption+ícone) → conteúdo: mb: "var(--space-xs)" no header div
-// - gap entre cards em stack: space-y-4 (Tailwind) — manter
 
 const ANOMALY_THRESHOLD = 0.6;
 const MAX_ANOMALIAS = 10;
@@ -35,41 +29,31 @@ function InsightCard({
   children: ReactNode;
 }) {
   const config = toneConfig[tone];
-
   return (
-    <Paper
-      elevation={0}
+    <div
       data-testid={testId}
-      sx={{
+      style={{
         borderRadius: "var(--radius-lg)",
-        p: "var(--space-md)",
-        bgcolor: "var(--color-surface-card)",
+        padding: "var(--space-md)",
+        backgroundColor: "var(--color-surface-card)",
         border: `1px solid color-mix(in srgb, ${config.color} 40%, var(--color-border-hairline))`,
       }}
     >
-      <div style={{ marginBottom: "var(--space-xs)" }} className="flex items-center gap-2">
+      <div style={{ marginBottom: "var(--space-xs)", display: "flex", alignItems: "center", gap: 8 }}>
         <span
           aria-hidden
           data-testid={`${testId}-indicator`}
           data-tone={tone}
-          style={{
-            color: config.color,
-            fontWeight: 700,
-            fontSize: "0.75rem",
-            lineHeight: 1,
-          }}
+          style={{ color: config.color, fontWeight: 700, fontSize: "0.75rem", lineHeight: 1 }}
         >
           {config.icon}
         </span>
-        <Typography
-          variant="caption"
-          sx={{ color: config.color, textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600 }}
-        >
+        <p style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600, color: config.color, margin: 0 }}>
           {title}
-        </Typography>
+        </p>
       </div>
       {children}
-    </Paper>
+    </div>
   );
 }
 
@@ -102,12 +86,12 @@ export function Insights({ month, digest }: { month: string; digest: Digest | nu
   return (
     <div className="mt-4 space-y-4">
       <header className="space-y-1 px-[var(--space-xxs)]">
-        <Typography variant="h5" sx={{ color: "var(--color-text-primary)", fontWeight: 700 }}>
+        <h5 style={{ color: "var(--color-text-primary)", fontWeight: 700, fontSize: "1.25rem", margin: 0 }}>
           Insights
-        </Typography>
-        <Typography variant="body2" sx={{ color: "var(--color-muted)" }}>
+        </h5>
+        <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
           Leitura gerada por IA para sinais positivos, alertas e contexto do mês.
-        </Typography>
+        </p>
       </header>
 
       {digest ? (
@@ -115,12 +99,9 @@ export function Insights({ month, digest }: { month: string; digest: Digest | nu
           <InsightCard title="Análise do Mês" tone="neutral" testId="insights-card-neutral">
             <FlagPills flags={digest.flags} />
             {digest.narrative_pt && (
-              <Typography
-                variant="body2"
-                sx={{ color: "var(--color-text-body)", mt: "var(--space-sm)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}
-              >
+              <p style={{ fontSize: "0.875rem", color: "var(--color-text-body)", marginTop: "var(--space-sm)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
                 {digest.narrative_pt}
-              </Typography>
+              </p>
             )}
           </InsightCard>
 
@@ -132,12 +113,12 @@ export function Insights({ month, digest }: { month: string; digest: Digest | nu
         </>
       ) : (
         <InsightCard title="Análise do Mês" tone="neutral" testId="insights-card-neutral">
-          <Typography variant="body2" sx={{ color: "var(--color-muted)", fontStyle: "italic" }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", fontStyle: "italic", margin: 0 }}>
             Análise de IA não disponível para este mês.
-          </Typography>
-          <Typography variant="caption" sx={{ color: "var(--color-muted)", mt: "var(--space-xs)", display: "block" }}>
+          </p>
+          <p style={{ fontSize: "0.75rem", color: "var(--color-muted)", marginTop: "var(--space-xs)", display: "block" }}>
             Execute: bun run digest --month {month}
-          </Typography>
+          </p>
         </InsightCard>
       )}
 
