@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Previsao } from "./Previsao.tsx";
 import DailyInsightsNavigator from "../components/DailyInsightsNavigator.tsx";
-import { postChatMessage } from "../api/client.ts";
-import type { ChatMessage } from "../api/types.ts";
+import { fetchTransacoes, postChatMessage } from "../api/client.ts";
+import type { ChatMessage, Transacao } from "../api/types.ts";
+import { AnomaliasList } from "../components/AnomaliasList.tsx";
 
-const SUB_TABS = ["Insights", "Previsões"];
+const ANOMALY_THRESHOLD = 0.6;
+const ANOMALIAS_INITIAL_LIMIT = 5;
 
 const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
@@ -189,52 +191,91 @@ function ChatIaPanel() {
   );
 }
 
-export default function IaScreen() {
-  const [activeSubTab, setActiveSubTab] = useState(0);
+const sectionHeadingStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  textTransform: "uppercase",
+  letterSpacing: 0.9,
+  fontWeight: 700,
+  color: "var(--color-text-body)",
+  margin: 0,
+  marginBottom: "var(--space-sm)",
+};
+
+function AnomaliasSection() {
+  const [anomalias, setAnomalias] = useState<Transacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  useEffect(() => {
+    fetchTransacoes(currentMonth, 100)
+      .then(({ items }) => {
+        const filtered = items
+          .filter((t) => (t.anomaly_score ?? 0) > ANOMALY_THRESHOLD)
+          .sort((a, b) => (b.anomaly_score ?? 0) - (a.anomaly_score ?? 0));
+        setAnomalias(filtered);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [currentMonth]);
+
+  if (loading) {
+    return <div className="loading loading-spinner loading-sm" style={{ margin: "var(--space-sm) 0" }} />;
+  }
+
+  const visible = showAll ? anomalias : anomalias.slice(0, ANOMALIAS_INITIAL_LIMIT);
 
   return (
     <div>
-      <div
-        role="tablist"
+      <AnomaliasList transacoes={visible} />
+      {!showAll && anomalias.length > ANOMALIAS_INITIAL_LIMIT && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          style={{
+            marginTop: "var(--space-sm)",
+            background: "transparent",
+            border: "1px solid var(--color-border-hairline)",
+            borderRadius: "var(--radius-md)",
+            padding: "4px var(--space-sm)",
+            fontSize: "0.8rem",
+            cursor: "pointer",
+            color: "var(--color-text-primary)",
+          }}
+        >
+          Ver mais ({anomalias.length - ANOMALIAS_INITIAL_LIMIT} restantes)
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function IaScreen() {
+  return (
+    <div className="mt-4 space-y-6">
+      <section>
+        <p style={sectionHeadingStyle}>✨ Análise do Mês</p>
+        <DailyInsightsNavigator />
+        <ChatIaPanel />
+      </section>
+
+      <section
         style={{
-          borderBottom: "1px solid var(--color-border-hairline)",
-          marginBottom: "var(--space-md)",
-          display: "flex",
+          borderRadius: "var(--radius-lg)",
+          padding: "var(--space-md)",
+          border: "1px solid var(--color-border-hairline)",
+          backgroundColor: "var(--color-surface-card)",
         }}
       >
-        {SUB_TABS.map((label, i) => (
-          <button
-            key={label}
-            role="tab"
-            aria-selected={activeSubTab === i}
-            onClick={() => setActiveSubTab(i)}
-            style={{
-              flex: 1,
-              padding: "8px 4px",
-              background: "transparent",
-              border: "none",
-              borderBottom: activeSubTab === i
-                ? "2px solid var(--color-primary)"
-                : "2px solid transparent",
-              color: activeSubTab === i ? "var(--color-primary)" : "var(--color-muted)",
-              fontWeight: activeSubTab === i ? 700 : 500,
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              transition: "color 0.15s",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        <p style={sectionHeadingStyle}>⚠️ Anomalias</p>
+        <AnomaliasSection />
+      </section>
 
-      {activeSubTab === 0 && (
-        <>
-          <DailyInsightsNavigator />
-          <ChatIaPanel />
-        </>
-      )}
-      {activeSubTab === 1 && <Previsao />}
+      <section>
+        <p style={sectionHeadingStyle}>📅 Previsões</p>
+        <Previsao />
+      </section>
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { handleListRegras, handleCreateRegra, handleUpdateRegra, handleDeleteReg
 import { handleListCategorias } from "./routes/categorias.ts";
 import { handlePatchCategoria, handleCountByDescriptionLike } from "./routes/transacoes.ts";
 import { handleCalculateSimulation, handleCreateSimulation, handleGetSimulations, handleGetSimulationById, handlePatchSimulation, handleUpdateSimulation } from "./routes/simulacoes.ts";
+import { handleInsightToday } from "./routes/insights.ts";
 
 export async function router(
   req: Request,
@@ -112,6 +113,8 @@ export async function router(
   if (path === "/api/categorias" && req.method === "GET") return handleListCategorias(req, tenantId, sql);
   if (path === "/api/transacoes/count" && req.method === "GET") return handleCountByDescriptionLike(req, url, tenantId, sql);
   if (path.startsWith("/api/transacoes/") && path.endsWith("/categoria") && req.method === "PATCH") return handlePatchCategoria(req, url, tenantId, sql);
+
+  if (path === "/api/insights/today" && req.method === "GET") return handleInsightToday(req, tenantId, sql);
 
   // simulações
   if (path === "/api/simulacoes/calculate" && req.method === "POST") return handleCalculateSimulation(req, url, tenantId, sql);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { fetchCashflow, fetchPatrimonio, fetchRunway } from "../api/client.ts";
-import type { CashflowMensal, Digest, Patrimonio, Runway } from "../api/types.ts";
+import { fetchCashflow, fetchPatrimonio, fetchRunway, fetchInsightToday } from "../api/client.ts";
+import type { CashflowMensal, Digest, InsightToday, Patrimonio, Runway } from "../api/types.ts";
+import { CardInsightDia } from "../components/CardInsightDia.tsx";
 import { LoadingCard } from "../components/LoadingCard.tsx";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { FlagPills } from "../components/FlagPills.tsx";
@@ -25,12 +26,13 @@ const captionStyle = {
 };
 const captionMutedStyle = { ...captionStyle, letterSpacing: 0.8, color: "var(--color-muted-strong)" };
 
-export function Resumo({ month, digest }: { month: string; digest: Digest | null }) {
+export function Resumo({ month, digest, onNavigateToInsights }: { month: string; digest: Digest | null; onNavigateToInsights?: () => void }) {
   const [cashflow, setCashflow] = useState<CashflowMensal | null>(null);
   const [runway, setRunway] = useState<Runway | null>(null);
   const [patrimonio, setPatrimonio] = useState<Patrimonio | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [insight, setInsight] = useState<InsightToday | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -52,6 +54,10 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
       });
   }, [month]);
 
+  useEffect(() => {
+    fetchInsightToday().then(setInsight).catch(() => null);
+  }, []);
+
   if (loading) return <LoadingCard title="Carregando Resumo..." />;
   if (error) return <ErrorCard message={error} />;
   if (!cashflow) return <ErrorCard message="Dados não disponíveis para este mês." />;
@@ -66,6 +72,14 @@ export function Resumo({ month, digest }: { month: string; digest: Digest | null
 
   return (
     <div className="mt-4 space-y-4">
+      {insight?.type != null && insight.text && (
+        <CardInsightDia
+          type={insight.type}
+          text={insight.text}
+          score={insight.score}
+          onVerDetalhes={() => onNavigateToInsights?.()}
+        />
+      )}
       <div style={cardStyle}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <p style={captionStyle}>Resultado mensal</p>

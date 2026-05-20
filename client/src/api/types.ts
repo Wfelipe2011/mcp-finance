@@ -18,6 +18,14 @@ export type GoalStatus = 'active' | 'achieved' | 'abandoned';
 
 export type BudgetStatus = 'ok' | 'warning' | 'exceeded';
 
+export type InsightType = "anomaly" | "digest" | "daily" | null;
+
+export interface InsightToday {
+  type: InsightType;
+  text: string | null;
+  score?: number;
+}
+
 export interface CategorizationRule {
   id: number;
   tenant_id: string;

@@ -31,6 +31,7 @@ import type {
   SimulationCalculatePayload,
   SimulationCalculateResult,
   SimulationCreatePayload,
+  InsightToday,
 } from "./types.ts";
 
 const BASE = "";
@@ -725,4 +726,10 @@ export function closeSimulation(id: string): Promise<Simulation> {
 
 export function reopenSimulation(id: string): Promise<Simulation> {
   return patch<Simulation>(`/api/simulacoes/${id}`, { status: "open" });
+}
+
+// ── Insights ─────────────────────────────────────────────────────────────────
+
+export function fetchInsightToday(): Promise<InsightToday> {
+  return get<InsightToday>("/api/insights/today");
 }

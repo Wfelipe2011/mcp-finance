@@ -57,7 +57,7 @@ const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "metas", label: "Metas", icon: "🎯" },
   { id: "simulacao", label: "Simulação", icon: "🔮" },
   { id: "credito", label: "Crédito", icon: "💳" },
-  { id: "ia", label: "IA", icon: "✨" },
+  { id: "ia", label: "Insights", icon: "✨" },
 ];
 
 const ADMIN_NAV_ITEM: { id: TabId; label: string; icon: string } = { id: "admin", label: "Admin", icon: "🛡️" };
@@ -162,7 +162,7 @@ export function App() {
   function renderTab() {
     switch (activeTab) {
       case "resumo":
-        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} /> : null;
+        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateToInsights={() => setActiveTab("ia")} /> : null;
       case "gastos":
         return selectedMonth ? <Gastos month={selectedMonth} /> : null;
       case "proximo-mes":
