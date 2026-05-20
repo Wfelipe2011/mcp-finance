@@ -197,9 +197,9 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
 
       {/* Step 0: Nome e Horizonte */}
       {step === 0 && (
-        <div className="space-y-4">
-          <div className="form-control">
-            <label className="label"><span className="label-text font-medium">Nome da simulação</span></label>
+        <div className="form-fields">
+          <div className="form-field">
+            <label className="form-field-label">Nome da simulação</label>
             <input
               className="input input-bordered"
               placeholder="Ex: Comprar notebook parcelado"
@@ -207,11 +207,11 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
               onChange={e => setName(e.target.value)}
             />
           </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Horizonte de projeção</span>
-              <span className="label-text-alt">{horizon} meses</span>
-            </label>
+          <div className="form-field">
+            <div className="form-field-row">
+              <label className="form-field-label">Horizonte de projeção</label>
+              <span className="text-xs opacity-60">{horizon} meses</span>
+            </div>
             <input
               type="range"
               min={1}
@@ -229,9 +229,9 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
 
       {/* Step 1: Item Principal */}
       {step === 1 && (
-        <div className="space-y-4">
-          <div className="form-control">
-            <label className="label"><span className="label-text font-medium">Tipo do item</span></label>
+        <div className="form-fields">
+          <div className="form-field">
+            <label className="form-field-label">Tipo do item</label>
             <select
               className="select select-bordered"
               value={item.item_type}
@@ -243,8 +243,8 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
             </select>
           </div>
 
-          <div className="form-control">
-            <label className="label"><span className="label-text font-medium">Descrição</span></label>
+          <div className="form-field">
+            <label className="form-field-label">Descrição</label>
             <input
               className="input input-bordered"
               placeholder="Ex: Notebook Dell, Plano de academia..."
@@ -255,8 +255,8 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
 
           {item.item_type === "new_purchase" && (
             <>
-              <div className="form-control">
-                <label className="label"><span className="label-text font-medium">Valor total (R$)</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Valor total (R$)</label>
                 <input
                   type="number"
                   min={0}
@@ -274,11 +274,11 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
                   }}
                 />
               </div>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text font-medium">Parcelas</span>
-                  <span className="label-text-alt">{item.installments}x</span>
-                </label>
+              <div className="form-field">
+                <div className="form-field-row">
+                  <label className="form-field-label">Parcelas</label>
+                  <span className="text-xs opacity-60">{item.installments}x</span>
+                </div>
                 <input
                   type="range"
                   min={1}
@@ -294,7 +294,7 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
                   }}
                 />
                 {item.monthly_amount && (
-                  <p className="text-sm opacity-70 mt-1">
+                  <p className="form-field-help mt-1">
                     = R$ {item.monthly_amount.toFixed(2)}/mês
                   </p>
                 )}
@@ -304,8 +304,8 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
 
           {(item.item_type === "recurring" || item.item_type === "income_adjustment") && (
             <>
-              <div className="form-control">
-                <label className="label"><span className="label-text font-medium">Valor mensal (R$)</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Valor mensal (R$)</label>
                 <input
                   type="number"
                   min={0}
@@ -319,8 +319,8 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
                   }}
                 />
               </div>
-              <div className="form-control">
-                <label className="label"><span className="label-text font-medium">Direção</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Direção</label>
                 <select
                   className="select select-bordered"
                   value={item.direction ?? "expense"}
@@ -433,7 +433,7 @@ export function SimulacaoForm({ initialData, onSaved, onCancel }: Props) {
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between pt-2">
+      <div className="flex justify-between pt-4">
         <button className="btn btn-ghost" onClick={step === 0 ? onCancel : prevStep}>
           {step === 0 ? "Cancelar" : "Voltar"}
         </button>

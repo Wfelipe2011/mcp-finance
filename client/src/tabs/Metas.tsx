@@ -252,9 +252,9 @@ function NovaMetaModal({
     <dialog ref={dialogRef} className="modal" onClose={onClose}>
       <div className="modal-box max-w-sm">
         <h3 className="font-bold text-lg mb-4">Nova Meta</h3>
-        <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-          <div>
-            <label className="label label-text text-xs">Nome</label>
+        <form onSubmit={handleSubmit} className="form-fields-compact" noValidate>
+          <div className="form-field">
+            <label className="form-field-label">Nome</label>
             <input
               type="text"
               className="input input-bordered w-full input-sm"
@@ -265,8 +265,8 @@ function NovaMetaModal({
             />
           </div>
 
-          <div>
-            <label className="label label-text text-xs">Tipo</label>
+          <div className="form-field">
+            <label className="form-field-label">Tipo</label>
             <select
               className="select select-bordered w-full select-sm"
               value={form.goal_type}
@@ -277,8 +277,8 @@ function NovaMetaModal({
             </select>
           </div>
 
-          <div>
-            <label className="label label-text text-xs">Valor alvo (R$)</label>
+          <div className="form-field">
+            <label className="form-field-label">Valor alvo (R$)</label>
             <input
               type="number"
               min={0.01}
@@ -292,8 +292,8 @@ function NovaMetaModal({
           </div>
 
           {form.goal_type === "spending" && (
-            <div>
-              <label className="label label-text text-xs">Categoria</label>
+            <div className="form-field">
+              <label className="form-field-label">Categoria</label>
               <select
                 className="select select-bordered w-full select-sm"
                 value={form.category_group}
@@ -308,8 +308,8 @@ function NovaMetaModal({
             </div>
           )}
 
-          <div>
-            <label className="label label-text text-xs">Prazo (opcional)</label>
+          <div className="form-field">
+            <label className="form-field-label">Prazo (opcional)</label>
             <input
               type="date"
               className="input input-bordered w-full input-sm"
@@ -318,8 +318,8 @@ function NovaMetaModal({
             />
           </div>
 
-          <div>
-            <label className="label label-text text-xs">Notas (opcional)</label>
+          <div className="form-field">
+            <label className="form-field-label">Notas (opcional)</label>
             <textarea
               className="textarea textarea-bordered w-full textarea-sm"
               value={form.notes}
@@ -329,9 +329,9 @@ function NovaMetaModal({
             />
           </div>
 
-          {error && <p className="text-error text-xs">{error}</p>}
+          {error && <p className="form-field-error">{error}</p>}
 
-          <div className="modal-action mt-2">
+          <div className="form-actions">
             <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={loading}>
               Cancelar
             </button>

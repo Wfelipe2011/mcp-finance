@@ -153,9 +153,9 @@ export function AdminTenants() {
         <dialog className="modal modal-open">
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">Novo Tenant</h3>
-            <form onSubmit={(e) => void handleCreate(e)}>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Nome</span></label>
+            <form onSubmit={(e) => void handleCreate(e)} className="form-fields-compact">
+              <div className="form-field">
+                <label className="form-field-label">Nome</label>
                 <input
                   className="input input-bordered input-sm"
                   required
@@ -163,8 +163,8 @@ export function AdminTenants() {
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Email</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Email</label>
                 <input
                   type="email"
                   className="input input-bordered input-sm"
@@ -173,8 +173,8 @@ export function AdminTenants() {
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Senha</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Senha</label>
                 <input
                   type="password"
                   className="input input-bordered input-sm"
@@ -183,8 +183,8 @@ export function AdminTenants() {
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Email Pluggy</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Email Pluggy</label>
                 <input
                   type="email"
                   className="input input-bordered input-sm"
@@ -192,8 +192,8 @@ export function AdminTenants() {
                   onChange={(e) => setForm((f) => ({ ...f, pluggy_email: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-4">
-                <label className="label"><span className="label-text">Senha Pluggy</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Senha Pluggy</label>
                 <input
                   type="password"
                   className="input input-bordered input-sm"
@@ -201,8 +201,8 @@ export function AdminTenants() {
                   onChange={(e) => setForm((f) => ({ ...f, pluggy_password: e.target.value }))}
                 />
               </div>
-              {formError && <div className="alert alert-error text-sm mb-2">{formError}</div>}
-              <div className="modal-action">
+              {formError && <div className="alert alert-error text-sm">{formError}</div>}
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"

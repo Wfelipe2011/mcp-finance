@@ -52,7 +52,7 @@ export function LoginScreen({ onLogin }: Props) {
           maxWidth: 380,
           display: "flex",
           flexDirection: "column",
-          gap: "var(--space-sm)",
+          gap: "var(--space-md)",
           padding: "var(--space-lg)",
           borderRadius: "var(--radius-xl)",
           border: "1px solid var(--color-border-hairline)",
@@ -88,10 +88,8 @@ export function LoginScreen({ onLogin }: Props) {
           </div>
         )}
 
-        <div>
-          <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-body)", display: "block", marginBottom: 4 }}>
-            Email
-          </label>
+        <div className="form-field">
+          <label className="form-field-label">Email</label>
           <input
             type="email"
             className="input input-bordered w-full"
@@ -103,10 +101,8 @@ export function LoginScreen({ onLogin }: Props) {
           />
         </div>
 
-        <div>
-          <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-body)", display: "block", marginBottom: 4 }}>
-            Senha
-          </label>
+        <div className="form-field">
+          <label className="form-field-label">Senha</label>
           <input
             type="password"
             className="input input-bordered w-full"

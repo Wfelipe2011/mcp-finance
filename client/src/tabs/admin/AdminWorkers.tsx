@@ -149,9 +149,9 @@ export function AdminWorkers() {
         <dialog className="modal modal-open">
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">Novo Worker</h3>
-            <form onSubmit={(e) => void handleCreate(e)}>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Nome</span></label>
+            <form onSubmit={(e) => void handleCreate(e)} className="form-fields-compact">
+              <div className="form-field">
+                <label className="form-field-label">Nome</label>
                 <input
                   className="input input-bordered input-sm"
                   required
@@ -159,8 +159,8 @@ export function AdminWorkers() {
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">AI Base URL</span></label>
+              <div className="form-field">
+                <label className="form-field-label">AI Base URL</label>
                 <input
                   type="url"
                   className="input input-bordered input-sm"
@@ -169,8 +169,8 @@ export function AdminWorkers() {
                   onChange={(e) => setForm((f) => ({ ...f, ai_base_url: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-2">
-                <label className="label"><span className="label-text">Modelo</span></label>
+              <div className="form-field">
+                <label className="form-field-label">Modelo</label>
                 <input
                   className="input input-bordered input-sm"
                   required
@@ -178,8 +178,8 @@ export function AdminWorkers() {
                   onChange={(e) => setForm((f) => ({ ...f, ai_model: e.target.value }))}
                 />
               </div>
-              <div className="form-control mb-4">
-                <label className="label"><span className="label-text">AI API Key (opcional)</span></label>
+              <div className="form-field">
+                <label className="form-field-label">AI API Key (opcional)</label>
                 <input
                   type="password"
                   className="input input-bordered input-sm"
@@ -188,9 +188,9 @@ export function AdminWorkers() {
                 />
               </div>
 
-              {formError && <div className="alert alert-error text-sm mb-2">{formError}</div>}
+              {formError && <div className="alert alert-error text-sm">{formError}</div>}
 
-              <div className="modal-action">
+              <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"

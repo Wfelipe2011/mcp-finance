@@ -50,6 +50,61 @@
     border-color: var(--color-primary);
     color: var(--color-primary);
   }
+
+  /* Form field layout helpers shared by compact modals and wizard forms. */
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-field-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-body);
+    line-height: 1.25;
+  }
+
+  .form-field-help {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+
+  .form-field-error {
+    font-size: 0.75rem;
+    color: var(--color-trading-down);
+  }
+
+  /* Linha com label e valor secundario na mesma linha (ex: range). */
+  .form-field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Pilha padrao entre campos. */
+  .form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm); /* 12px */
+  }
+
+  /* Pilha compacta para modais pequenos. */
+  .form-fields-compact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs); /* 8px */
+  }
+
+  /* Linha de acoes de formulario. */
+  .form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+    margin-top: var(--space-md);
+  }
 }
 
 :root {
