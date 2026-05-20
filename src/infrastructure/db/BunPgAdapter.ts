@@ -142,6 +142,37 @@ export interface TenantRow {
   last_login_at: string | null;
 }
 
+export type JobType = 'enrich' | 'digest' | 'forecast' | 'daily_insight';
+export type JobStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
+
+export interface ClaimedJob {
+  job_id: number;
+  job_type: JobType;
+  tenant_id: string;
+  payload: Record<string, unknown>;
+  ref_date: string;
+  attempts: number;
+}
+
+export interface JobQueueStatsByType {
+  job_type: JobType;
+  pending: number;
+  running: number;
+  done: number;
+  error: number;
+  skipped: number;
+}
+
+export interface JobQueueAdapter {
+  enqueue(type: JobType, tenantId: string, payload: Record<string, unknown>, refDate: string, priorityBase: number): Promise<boolean>;
+  claimNext(workerId: string): Promise<ClaimedJob | null>;
+  markDone(jobId: number): Promise<void>;
+  markError(jobId: number, msg: string): Promise<void>;
+  markSkipped(jobId: number): Promise<void>;
+  releaseStuck(): Promise<void>;
+  getStatsByType(jobType?: JobType): Promise<JobQueueStatsByType[]>;
+}
+
 export interface EnrichJob {
   id: number;
   tenant_id: string;
@@ -426,6 +457,20 @@ function parseTextArray(value: unknown): string[] | null {
   return content.split(",").map((item) => item.replace(/^"|"$/g, "").replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
 }
 
+function calculatePriorityScore(refDate: string, priorityBase: number): number {
+  const [yearPart, monthPart] = refDate.slice(0, 10).split("-");
+  const refYear = Number(yearPart);
+  const refMonth = Number(monthPart);
+  if (!Number.isFinite(refYear) || !Number.isFinite(refMonth)) return priorityBase;
+
+  const now = new Date();
+  const monthsBehind = Math.max(
+    0,
+    (now.getFullYear() - refYear) * 12 + (now.getMonth() + 1 - refMonth),
+  );
+  return priorityBase + monthsBehind * 15;
+}
+
 export class BunPgAdapter {
   private readonly sql: SQL;
   private readonly ownsSql: boolean;
@@ -468,31 +513,7 @@ export class BunPgAdapter {
     create(data: { name: string; email: string; password_hash: string; pluggy_email?: string | null; pluggy_password?: string | null }): Promise<TenantRow>;
     setStatus(id: string, status: string): Promise<TenantRow | null>;
   };
-  readonly enrich_jobs: {
-    enqueue(tenantId: string, transactionIds: string[]): Promise<number>;
-    nextJob(workerId: string): Promise<EnrichJob | null>;
-    markDone(jobId: number, workerId: string): Promise<void>;
-    markError(jobId: number, error: string): Promise<void>;
-    releaseStuck(): Promise<void>;
-    getQueueStats(): Promise<QueueStats>;
-  };
-  readonly digest_jobs: {
-    enqueue(tenants: { id: string; year: number; month: number }[]): Promise<number>;
-    nextJob(workerId: string): Promise<DigestJob | null>;
-    markDone(jobId: number): Promise<void>;
-    markError(jobId: number, msg: string): Promise<void>;
-    markSkipped(jobId: number): Promise<void>;
-    releaseStuck(): Promise<void>;
-    getQueueStats(): Promise<SimpleQueueStats>;
-  };
-  readonly forecast_jobs: {
-    enqueue(tenants: { id: string }[], date: string): Promise<number>;
-    nextJob(workerId: string): Promise<ForecastJob | null>;
-    markDone(jobId: number): Promise<void>;
-    markError(jobId: number, msg: string): Promise<void>;
-    releaseStuck(): Promise<void>;
-    getQueueStats(): Promise<SimpleQueueStats>;
-  };
+  readonly jobQueue: JobQueueAdapter;
   readonly categoryRules: {
     list(): Promise<CategoryRuleRow[]>;
     create(value: string, categoryId: string, note?: string): Promise<CategoryRuleRow>;
@@ -1540,13 +1561,13 @@ export class BunPgAdapter {
               ORDER BY EXTRACT(EPOCH FROM (jall.finished_at - jall.started_at))
             ) AS median_duration_all_secs
           FROM workers w
-          LEFT JOIN enrich_jobs j7
+          LEFT JOIN job_queue j7
             ON j7.worker_id = w.id
             AND j7.status = 'done'
             AND j7.finished_at IS NOT NULL
             AND j7.started_at IS NOT NULL
             AND j7.finished_at >= NOW() - INTERVAL '7 days'
-          LEFT JOIN enrich_jobs jall
+          LEFT JOIN job_queue jall
             ON jall.worker_id = w.id
             AND jall.status = 'done'
             AND jall.finished_at IS NOT NULL
@@ -1617,211 +1638,60 @@ export class BunPgAdapter {
       },
     };
 
-    // ── enrich_jobs ───────────────────────────────────────────────────────────
-    this.enrich_jobs = {
-      async enqueue(tenantId: string, _transactionIds: string[]): Promise<number> {
-        const result = await sql.begin(async (tx) => {
-          await tx`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
-          return tx`
-            INSERT INTO enrich_jobs (tenant_id, transaction_id, date)
-            SELECT t.tenant_id, t.id, t.date
-            FROM transactions t
-            WHERE t.tenant_id = ${tenantId}::uuid
-              AND NOT EXISTS (
-                SELECT 1 FROM ai_transaction_insights ai WHERE ai.transaction_id = t.id
-              )
-            ON CONFLICT (transaction_id) DO NOTHING
-            RETURNING id
-          `;
-        });
-        return result.length;
+    // ── jobQueue ──────────────────────────────────────────────────────────────
+    this.jobQueue = {
+      async enqueue(type, tenantId, payload, refDate, priorityBase) {
+        const priorityScore = calculatePriorityScore(refDate, priorityBase);
+
+        const rows = await sql`
+          INSERT INTO job_queue (job_type, tenant_id, payload, ref_date, priority_base, priority_score)
+          VALUES (${type}, ${tenantId}::uuid, ${JSON.stringify(payload)}::jsonb,
+                  ${refDate}::date, ${priorityBase}, ${priorityScore})
+          ON CONFLICT (job_type, tenant_id, ref_date) DO NOTHING
+          RETURNING id
+        `;
+        return rows.length > 0;
       },
 
-      async nextJob(workerId: string): Promise<EnrichJob | null> {
-        const rows = await sql<EnrichJob[]>`
-          WITH rnd_tenant AS (
-            SELECT tenant_id FROM enrich_jobs
-            WHERE status = 'pending'
-            GROUP BY tenant_id
-            ORDER BY RANDOM() LIMIT 1
-          ),
-          next AS (
-            SELECT id, transaction_id, tenant_id, date
-            FROM enrich_jobs
-            WHERE status = 'pending'
-              AND tenant_id = (SELECT tenant_id FROM rnd_tenant)
-            ORDER BY date DESC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-          UPDATE enrich_jobs SET
-            status = 'running',
-            worker_id = ${workerId}::uuid,
-            started_at = NOW(),
-            attempts = attempts + 1
-          FROM next
-          WHERE enrich_jobs.id = next.id
-          RETURNING enrich_jobs.id, enrich_jobs.tenant_id, enrich_jobs.transaction_id,
-                    enrich_jobs.date, enrich_jobs.status, enrich_jobs.attempts, enrich_jobs.worker_id
-        `;
-        return rows[0] ?? null;
-      },
-
-      async markDone(jobId: number, workerId: string): Promise<void> {
-        await sql.begin(async (tx) => {
-          await tx`
-            UPDATE enrich_jobs
-            SET status = 'done', finished_at = NOW()
-            WHERE id = ${jobId}
-          `;
-          await tx`
-            UPDATE workers
-            SET jobs_done = jobs_done + 1, last_seen_at = NOW()
-            WHERE id = ${workerId}::uuid
-          `;
-        });
-      },
-
-      async markError(jobId: number, error: string): Promise<void> {
-        await sql`
-          UPDATE enrich_jobs
-          SET
-            error_msg = ${error},
-            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
-            started_at = NULL,
-            worker_id = NULL
-          WHERE id = ${jobId}
-        `;
-      },
-
-      async releaseStuck(): Promise<void> {
-        await sql`
-          UPDATE enrich_jobs
-          SET status = 'pending', started_at = NULL, worker_id = NULL
-          WHERE status = 'running'
-            AND started_at < NOW() - INTERVAL '10 minutes'
-        `;
-      },
-
-      async getQueueStats(): Promise<QueueStats> {
-        // Query 1: counts by status
-        const countRows = await sql<{ status: string; cnt: string }[]>`
-          SELECT status, COUNT(*) AS cnt FROM enrich_jobs GROUP BY status
-        `;
-        const counts: Record<string, number> = {};
-        for (const r of countRows) counts[r.status] = parseInt(r.cnt, 10);
-        const pending = counts['pending'] ?? 0;
-        const running = counts['running'] ?? 0;
-        const done = counts['done'] ?? 0;
-        const error = counts['error'] ?? 0;
-        const total = pending + running + done + error;
-        const error_rate_current = total > 0 ? error / total : 0;
-        const error_rate_historical = (done + error) > 0 ? error / (done + error) : 0;
-
-        // Query 2: mediana por worker ativo com histórico
-        const workerRows = await sql<{ median_secs: string }[]>`
-          SELECT
-            PERCENTILE_CONT(0.5) WITHIN GROUP (
-              ORDER BY EXTRACT(EPOCH FROM (j.finished_at - j.started_at))
-            ) AS median_secs
-          FROM workers w
-          JOIN enrich_jobs j ON j.worker_id = w.id
-            AND j.status = 'done'
-            AND j.finished_at IS NOT NULL AND j.started_at IS NOT NULL
-          WHERE w.status IN ('active', 'idle', 'busy')
-          GROUP BY w.id
-          HAVING COUNT(j.id) > 0
-        `;
-
-        if (workerRows.length > 0) {
-          let throughput = 0;
-          for (const r of workerRows) {
-            const median = parseFloat(r.median_secs);
-            if (median > 0) throughput += 1 / median;
-          }
-          const eta_seconds = throughput > 0 && pending > 0 ? Math.ceil(pending / throughput) : null;
-          return { pending, running, done, error, total, error_rate_current, error_rate_historical,
-            throughput_jobs_per_sec: throughput > 0 ? throughput : null, eta_seconds, throughput_source: 'workers' };
-        }
-
-        // Query 3 fallback: mediana global (7d)
-        const globalRows = await sql<{ global_median_secs: string | null }[]>`
-          SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (
-            ORDER BY EXTRACT(EPOCH FROM (finished_at - started_at))
-          ) AS global_median_secs
-          FROM enrich_jobs
-          WHERE status = 'done'
-            AND finished_at IS NOT NULL AND started_at IS NOT NULL
-            AND finished_at >= NOW() - INTERVAL '7 days'
-        `;
-        const globalMedian = globalRows[0]?.global_median_secs
-          ? parseFloat(globalRows[0].global_median_secs) : null;
-
-        if (globalMedian && globalMedian > 0) {
-          const activeRows = await sql<{ cnt: string }[]>`
-            SELECT COUNT(*) AS cnt FROM workers WHERE status IN ('active', 'idle', 'busy')
-          `;
-          const nActive = parseInt(activeRows[0]?.cnt ?? '0', 10);
-          const throughput = nActive > 0 ? nActive / globalMedian : null;
-          const eta_seconds = throughput && throughput > 0 && pending > 0
-            ? Math.ceil(pending / throughput) : null;
-          return { pending, running, done, error, total, error_rate_current, error_rate_historical,
-            throughput_jobs_per_sec: throughput, eta_seconds, throughput_source: 'global' };
-        }
-
-        return { pending, running, done, error, total, error_rate_current, error_rate_historical,
-          throughput_jobs_per_sec: null, eta_seconds: null, throughput_source: 'unavailable' };
-      },
-    };
-
-    // ── digest_jobs ───────────────────────────────────────────────────────────
-    this.digest_jobs = {
-      async enqueue(tenants) {
-        let inserted = 0;
-        for (const t of tenants) {
-          const rows = await sql`
-            INSERT INTO digest_jobs (tenant_id, year, month)
-            VALUES (${t.id}::uuid, ${t.year}, ${t.month})
-            ON CONFLICT (tenant_id, year, month) DO NOTHING
-            RETURNING id
-          `;
-          inserted += rows.length;
-        }
-        return inserted;
-      },
-
-      async nextJob(workerId) {
-        const rows = await sql<DigestJob[]>`
-          WITH next AS (
-            SELECT id, tenant_id, year, month
-            FROM digest_jobs
-            WHERE status = 'pending'
-            ORDER BY created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-          UPDATE digest_jobs SET
-            status = 'running',
-            worker_id = ${workerId}::uuid,
-            started_at = NOW(),
-            attempts = attempts + 1
-          FROM next
-          WHERE digest_jobs.id = next.id
-          RETURNING digest_jobs.id, digest_jobs.tenant_id, digest_jobs.year, digest_jobs.month,
-                    digest_jobs.status, digest_jobs.attempts, digest_jobs.worker_id
-        `;
-        return rows[0] ?? null;
+      async claimNext(workerId) {
+        const rows = await sql<{
+          job_id: string; job_type: string; tenant_id: string;
+          payload: unknown; ref_date: string; attempts: number;
+        }[]>`SELECT * FROM claim_next_job(${workerId}::uuid)`;
+        const row = rows[0];
+        if (!row) return null;
+        return {
+          job_id: Number(row.job_id),
+          job_type: row.job_type as JobType,
+          tenant_id: row.tenant_id,
+          payload: (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as Record<string, unknown>,
+          ref_date: row.ref_date,
+          attempts: Number(row.attempts),
+        };
       },
 
       async markDone(jobId) {
-        await sql`
-          UPDATE digest_jobs SET status = 'done', finished_at = NOW() WHERE id = ${jobId}
-        `;
+        await sql.begin(async (tx) => {
+          const rows = await tx<{ worker_id: string | null }[]>`
+            UPDATE job_queue
+            SET status = 'done', finished_at = NOW(), error_msg = NULL
+            WHERE id = ${jobId}
+            RETURNING worker_id::text
+          `;
+          const workerId = rows[0]?.worker_id;
+          if (workerId) {
+            await tx`
+              UPDATE workers
+              SET jobs_done = jobs_done + 1, last_seen_at = NOW()
+              WHERE id = ${workerId}::uuid
+            `;
+          }
+        });
       },
 
       async markError(jobId, msg) {
         await sql`
-          UPDATE digest_jobs SET
+          UPDATE job_queue SET
             error_msg = ${msg},
             status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
             started_at = NULL, worker_id = NULL
@@ -1831,107 +1701,38 @@ export class BunPgAdapter {
 
       async markSkipped(jobId) {
         await sql`
-          UPDATE digest_jobs SET status = 'skipped', finished_at = NOW() WHERE id = ${jobId}
+          UPDATE job_queue SET status = 'skipped', finished_at = NOW(), error_msg = NULL WHERE id = ${jobId}
         `;
       },
 
       async releaseStuck() {
         await sql`
-          UPDATE digest_jobs SET status = 'pending', started_at = NULL, worker_id = NULL
+          UPDATE job_queue SET status = 'pending', started_at = NULL, worker_id = NULL
           WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
         `;
       },
 
-      async getQueueStats() {
-        const rows = await sql<{ status: string; cnt: string }[]>`
-          SELECT status, COUNT(*) AS cnt FROM digest_jobs GROUP BY status
+      async getStatsByType(jobType) {
+        const rows = await sql<{ job_type: string; status: string; cnt: string }[]>`
+          SELECT job_type, status, COUNT(*) AS cnt
+          FROM job_queue
+          ${jobType ? sql`WHERE job_type = ${jobType}` : sql``}
+          GROUP BY job_type, status
         `;
-        const c: Record<string, number> = {};
-        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
-        return {
-          pending: c['pending'] ?? 0,
-          running: c['running'] ?? 0,
-          done:    c['done']    ?? 0,
-          error:   c['error']   ?? 0,
-          skipped: c['skipped'] ?? 0,
-        };
-      },
-    };
-
-    // ── forecast_jobs ─────────────────────────────────────────────────────────
-    this.forecast_jobs = {
-      async enqueue(tenants, date) {
-        let inserted = 0;
-        for (const t of tenants) {
-          const rows = await sql`
-            INSERT INTO forecast_jobs (tenant_id, job_date)
-            VALUES (${t.id}::uuid, ${date})
-            ON CONFLICT (tenant_id, job_date) DO NOTHING
-            RETURNING id
-          `;
-          inserted += rows.length;
+        const map = new Map<string, JobQueueStatsByType>();
+        for (const r of rows) {
+          if (!map.has(r.job_type)) {
+            map.set(r.job_type, { job_type: r.job_type as JobType, pending: 0, running: 0, done: 0, error: 0, skipped: 0 });
+          }
+          const entry = map.get(r.job_type)!;
+          const count = parseInt(r.cnt, 10);
+          if (r.status === 'pending') entry.pending = count;
+          else if (r.status === 'running') entry.running = count;
+          else if (r.status === 'done') entry.done = count;
+          else if (r.status === 'error') entry.error = count;
+          else if (r.status === 'skipped') entry.skipped = count;
         }
-        return inserted;
-      },
-
-      async nextJob(workerId) {
-        const rows = await sql<ForecastJob[]>`
-          WITH next AS (
-            SELECT id, tenant_id, job_date
-            FROM forecast_jobs
-            WHERE status = 'pending'
-            ORDER BY created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-          UPDATE forecast_jobs SET
-            status = 'running',
-            worker_id = ${workerId}::uuid,
-            started_at = NOW(),
-            attempts = attempts + 1
-          FROM next
-          WHERE forecast_jobs.id = next.id
-          RETURNING forecast_jobs.id, forecast_jobs.tenant_id, forecast_jobs.job_date,
-                    forecast_jobs.status, forecast_jobs.attempts, forecast_jobs.worker_id
-        `;
-        return rows[0] ?? null;
-      },
-
-      async markDone(jobId) {
-        await sql`
-          UPDATE forecast_jobs SET status = 'done', finished_at = NOW() WHERE id = ${jobId}
-        `;
-      },
-
-      async markError(jobId, msg) {
-        await sql`
-          UPDATE forecast_jobs SET
-            error_msg = ${msg},
-            status = CASE WHEN attempts >= 3 THEN 'error' ELSE 'pending' END,
-            started_at = NULL, worker_id = NULL
-          WHERE id = ${jobId}
-        `;
-      },
-
-      async releaseStuck() {
-        await sql`
-          UPDATE forecast_jobs SET status = 'pending', started_at = NULL, worker_id = NULL
-          WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes'
-        `;
-      },
-
-      async getQueueStats() {
-        const rows = await sql<{ status: string; cnt: string }[]>`
-          SELECT status, COUNT(*) AS cnt FROM forecast_jobs GROUP BY status
-        `;
-        const c: Record<string, number> = {};
-        for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
-        return {
-          pending: c['pending'] ?? 0,
-          running: c['running'] ?? 0,
-          done:    c['done']    ?? 0,
-          error:   c['error']   ?? 0,
-        };
+        return Array.from(map.values());
       },
     };
 
@@ -2510,11 +2311,11 @@ export class BunPgAdapter {
         WHERE coverage.total > 0
           AND coverage.enriched::float / coverage.total >= 0.8
           AND NOT EXISTS (
-            SELECT 1 FROM digest_jobs dj
-            WHERE dj.tenant_id = ${tenantId}::uuid
-              AND dj.year  = coverage.year
-              AND dj.month = coverage.month
-              AND dj.status IN ('done', 'pending', 'running')
+            SELECT 1 FROM job_queue jq
+            WHERE jq.tenant_id = ${tenantId}::uuid
+              AND jq.job_type = 'digest'
+              AND jq.ref_date = MAKE_DATE(coverage.year, coverage.month, 1)
+              AND jq.status IN ('done', 'pending', 'running')
           )
         ORDER BY coverage.year, coverage.month
       `;

@@ -38,65 +38,65 @@ CREATE TABLE IF NOT EXISTS workers (
 );
 
 -- ────────────────────────────────────────────────
--- enrich_jobs (fila de enriquecimento AI por transação)
+-- job_queue (fila unificada de jobs AI — substitui enrich_jobs,
+--            digest_jobs, forecast_jobs e daily_insight_jobs)
 -- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS enrich_jobs (
+CREATE TABLE IF NOT EXISTS job_queue (
   id             BIGSERIAL PRIMARY KEY,
-  tenant_id      UUID NOT NULL REFERENCES tenants(id),
-  transaction_id TEXT NOT NULL UNIQUE,
-  date           TEXT,
-  status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'error')),
-  attempts       INTEGER NOT NULL DEFAULT 0,
-  worker_id      UUID REFERENCES workers(id),
+  job_type       TEXT      NOT NULL CHECK (job_type IN ('enrich', 'digest', 'forecast', 'daily_insight')),
+  tenant_id      UUID      NOT NULL REFERENCES tenants(id),
+  payload        JSONB     NOT NULL DEFAULT '{}',
+  ref_date       DATE      NOT NULL,
+  priority_base  INT       NOT NULL DEFAULT 0,
+  priority_score INT       NOT NULL DEFAULT 0,
+  status         TEXT      NOT NULL DEFAULT 'pending'
+                           CHECK (status IN ('pending', 'running', 'done', 'error', 'skipped')),
+  attempts       INT       NOT NULL DEFAULT 0,
+  worker_id      UUID,
   started_at     TIMESTAMP,
   finished_at    TIMESTAMP,
   error_msg      TEXT,
-  created_at     TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (job_type, tenant_id, ref_date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_enrich_jobs_status_tenant_date
-  ON enrich_jobs (status, tenant_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_job_queue_priority
+  ON job_queue (priority_score ASC, created_at ASC)
+  WHERE status = 'pending';
 
--- ────────────────────────────────────────────────
--- digest_jobs (fila de geração de digest por tenant/mês)
--- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS digest_jobs (
-  id          BIGSERIAL PRIMARY KEY,
-  tenant_id   UUID NOT NULL REFERENCES tenants(id),
-  year        INTEGER NOT NULL,
-  month       INTEGER NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'error', 'skipped')),
-  attempts    INTEGER NOT NULL DEFAULT 0,
-  worker_id   UUID REFERENCES workers(id),
-  started_at  TIMESTAMP,
-  finished_at TIMESTAMP,
-  error_msg   TEXT,
-  created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, year, month)
-);
-
-CREATE INDEX IF NOT EXISTS idx_digest_jobs_status
-  ON digest_jobs (status);
-
--- ────────────────────────────────────────────────
--- forecast_jobs (fila de mensagem diária de forecast)
--- ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS forecast_jobs (
-  id          BIGSERIAL PRIMARY KEY,
-  tenant_id   UUID NOT NULL REFERENCES tenants(id),
-  job_date    TEXT NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'error')),
-  attempts    INTEGER NOT NULL DEFAULT 0,
-  worker_id   UUID REFERENCES workers(id),
-  started_at  TIMESTAMP,
-  finished_at TIMESTAMP,
-  error_msg   TEXT,
-  created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, job_date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_forecast_jobs_status
-  ON forecast_jobs (status);
+-- ── claim_next_job ──────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION claim_next_job(p_worker_id UUID)
+RETURNS TABLE(
+  job_id       BIGINT,
+  job_type     TEXT,
+  tenant_id    UUID,
+  payload      JSONB,
+  ref_date     DATE,
+  attempts     INT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  WITH next AS (
+    SELECT id
+    FROM job_queue
+    WHERE status = 'pending'
+    ORDER BY priority_score ASC, created_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+  )
+  UPDATE job_queue jq SET
+    status     = 'running',
+    worker_id  = p_worker_id,
+    started_at = NOW(),
+    finished_at = NULL,
+    error_msg  = NULL,
+    attempts   = jq.attempts + 1
+  FROM next
+  WHERE jq.id = next.id
+  RETURNING jq.id, jq.job_type, jq.tenant_id, jq.payload, jq.ref_date, jq.attempts;
+END;
+$$;
 
 -- ────────────────────────────────────────────────
 -- ml_training_jobs (fila de treino ML por tenant)
@@ -606,7 +606,7 @@ ALTER TABLE financial_goals FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON financial_goals
   USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
 
--- Note: enrich_jobs and workers do NOT have RLS — workers need cross-tenant visibility
+-- Note: job_queue and workers do NOT have RLS — workers need cross-tenant visibility
 
 -- ────────────────────────────────────────────────
 -- category_budgets (orçamentos mensais por categoria por tenant)

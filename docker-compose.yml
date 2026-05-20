@@ -124,19 +124,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  daily-insight-worker:
-    build: .
-    command: bun run src/application/workers/daily-insight-worker.ts
-    environment:
-      DATABASE_URL: postgres://finance:finance@postgres:5432/finance
-      AI_BASE_URL: ${AI_BASE_URL}
-      AI_API_KEY: ${AI_API_KEY}
-      AI_MODEL: ${AI_MODEL}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   postgres:
     image: postgres:16
     restart: unless-stopped

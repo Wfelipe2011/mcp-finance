@@ -1,4 +1,3 @@
-import { SQL } from "bun";
 import { BunPgAdapter } from "../../infrastructure/db/BunPgAdapter.ts";
 
 function todayIso(): string {
@@ -10,7 +9,6 @@ async function runDailyInsightCron(): Promise<void> {
   if (!DATABASE_URL) throw new Error("DATABASE_URL is required");
 
   const db = new BunPgAdapter();
-  const sql = new SQL(DATABASE_URL);
 
   const tenantIds = await db.getActiveTenantsIds();
   const today = todayIso();
@@ -21,17 +19,11 @@ async function runDailyInsightCron(): Promise<void> {
 
   let inserted = 0;
   for (const tenantId of tenantIds) {
-    const rows = await sql`
-      INSERT INTO daily_insight_jobs (tenant_id, job_date)
-      VALUES (${tenantId}::uuid, ${today}::date)
-      ON CONFLICT (tenant_id, job_date) DO NOTHING
-      RETURNING id
-    `;
-    inserted += rows.length;
+    const ok = await db.jobQueue.enqueue("daily_insight", tenantId, { job_date: today }, today, 0);
+    if (ok) inserted++;
   }
 
   console.log(`[daily-insight-cron] enqueued ${inserted} new daily insight job(s)`);
-  await sql.close();
   await db.close();
   console.log(`[daily-insight-cron] Enqueue complete`);
 }

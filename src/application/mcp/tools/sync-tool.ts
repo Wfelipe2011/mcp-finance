@@ -31,7 +31,16 @@ export function registerSyncTool(server: McpServer, sql: SQL): void {
           enrichTransactionRepo: db.enrichTransactions,
         });
         const summary = await useCase.run();
-        const enrichQueued = await db.enrich_jobs.enqueue(tenant_id, summary.transactionIds);
+        let enrichQueued = 0;
+        for (const txId of summary.transactionIds) {
+          const txRows = await sql.begin(async (tx) => {
+            await tx`SELECT set_config('app.tenant_id', ${tenant_id}, true)`;
+            return tx<{ date: string }[]>`SELECT date::text AS date FROM transactions WHERE id = ${txId} LIMIT 1`;
+          });
+          const txDate = txRows[0]?.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+          const ok = await db.jobQueue.enqueue("enrich", tenant_id, { transaction_id: txId, date: txDate }, txDate, 10);
+          if (ok) enrichQueued++;
+        }
         const { transactionIds: _, ...rest } = summary;
         return toolSuccess({ ...rest, enrich_queued: enrichQueued });
       } catch (err) {

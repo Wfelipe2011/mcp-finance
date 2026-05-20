@@ -181,36 +181,24 @@ export function registerAiMlOpsTools(server: McpServer, sql: SQL): void {
           ORDER BY status, name
         `;
 
-        const enrichStats = await sql<[{ pending: string; running: string; done: string; error: string }]>`
-          SELECT
-            COUNT(*) FILTER (WHERE status = 'pending')::text AS pending,
-            COUNT(*) FILTER (WHERE status = 'running')::text AS running,
-            COUNT(*) FILTER (WHERE status = 'done')::text AS done,
-            COUNT(*) FILTER (WHERE status = 'error')::text AS error
-          FROM enrich_jobs
+        const queueRows = await sql<{ job_type: string; status: string; cnt: string }[]>`
+          SELECT job_type, status, COUNT(*) AS cnt
+          FROM job_queue
           ${tenant_id ? sql`WHERE tenant_id = ${tenant_id}::uuid` : sql``}
+          GROUP BY job_type, status
         `;
-
-        const digestStats = await sql<[{ pending: string; running: string; done: string; error: string; skipped: string }]>`
-          SELECT
-            COUNT(*) FILTER (WHERE status = 'pending')::text AS pending,
-            COUNT(*) FILTER (WHERE status = 'running')::text AS running,
-            COUNT(*) FILTER (WHERE status = 'done')::text AS done,
-            COUNT(*) FILTER (WHERE status = 'error')::text AS error,
-            COUNT(*) FILTER (WHERE status = 'skipped')::text AS skipped
-          FROM digest_jobs
-          ${tenant_id ? sql`WHERE tenant_id = ${tenant_id}::uuid` : sql``}
-        `;
-
-        const forecastStats = await sql<[{ pending: string; running: string; done: string; error: string }]>`
-          SELECT
-            COUNT(*) FILTER (WHERE status = 'pending')::text AS pending,
-            COUNT(*) FILTER (WHERE status = 'running')::text AS running,
-            COUNT(*) FILTER (WHERE status = 'done')::text AS done,
-            COUNT(*) FILTER (WHERE status = 'error')::text AS error
-          FROM forecast_jobs
-          ${tenant_id ? sql`WHERE tenant_id = ${tenant_id}::uuid` : sql``}
-        `;
+        const queueMap: Record<string, Record<string, number>> = {};
+        for (const r of queueRows) {
+          if (!queueMap[r.job_type]) queueMap[r.job_type] = {};
+          queueMap[r.job_type]![r.status] = parseInt(r.cnt, 10);
+        }
+        const qStat = (jt: string) => ({
+          pending: queueMap[jt]?.['pending'] ?? 0,
+          running: queueMap[jt]?.['running'] ?? 0,
+          done:    queueMap[jt]?.['done']    ?? 0,
+          error:   queueMap[jt]?.['error']   ?? 0,
+          skipped: queueMap[jt]?.['skipped'] ?? 0,
+        });
 
         const mlStats = await sql<[{ pending: string; running: string; done: string; error: string }]>`
           SELECT
@@ -224,26 +212,20 @@ export function registerAiMlOpsTools(server: McpServer, sql: SQL): void {
 
         // Diagnostics: stuck jobs (running > 30 minutes)
         const stuckRows = await sql<{ job_type: string; id: number; tenant_id: string; started_at: string }[]>`
-          SELECT 'enrich' AS job_type, id, tenant_id::text, started_at::text
-          FROM enrich_jobs WHERE status = 'running' AND started_at < NOW() - INTERVAL '30 minutes'
-          UNION ALL
-          SELECT 'digest', id, tenant_id::text, started_at::text
-          FROM digest_jobs WHERE status = 'running' AND started_at < NOW() - INTERVAL '30 minutes'
-          UNION ALL
-          SELECT 'forecast', id, tenant_id::text, started_at::text
-          FROM forecast_jobs WHERE status = 'running' AND started_at < NOW() - INTERVAL '30 minutes'
+          SELECT job_type, id, tenant_id::text, started_at::text
+          FROM job_queue
+          WHERE status = 'running' AND started_at < NOW() - INTERVAL '30 minutes'
+          ${tenant_id ? sql`AND tenant_id = ${tenant_id}::uuid` : sql``}
         `;
 
         const recentErrors = await sql<{ job_type: string; id: number; error_msg: string | null; updated_at: string }[]>`
-          SELECT 'enrich' AS job_type, id, error_msg, finished_at::text AS updated_at
-          FROM enrich_jobs WHERE status = 'error'
+          SELECT job_type, id, error_msg, finished_at::text AS updated_at
+          FROM job_queue
+          WHERE status = 'error'
           ${tenant_id ? sql`AND tenant_id = ${tenant_id}::uuid` : sql``}
           ORDER BY finished_at DESC NULLS LAST LIMIT 5
         `;
 
-        const e = enrichStats[0]!;
-        const d = digestStats[0]!;
-        const f = forecastStats[0]!;
         const ml = mlStats[0]!;
 
         return toolSuccess({
@@ -257,9 +239,10 @@ export function registerAiMlOpsTools(server: McpServer, sql: SQL): void {
             last_seen_at: w.last_seen_at,
           })),
           queues: {
-            enrich_jobs: { pending: Number(e.pending), running: Number(e.running), done: Number(e.done), error: Number(e.error) },
-            digest_jobs: { pending: Number(d.pending), running: Number(d.running), done: Number(d.done), error: Number(d.error), skipped: Number(d.skipped) },
-            forecast_jobs: { pending: Number(f.pending), running: Number(f.running), done: Number(f.done), error: Number(f.error) },
+            enrich:        qStat('enrich'),
+            digest:        qStat('digest'),
+            forecast:      qStat('forecast'),
+            daily_insight: qStat('daily_insight'),
             ml_training_jobs: { pending: Number(ml.pending), running: Number(ml.running), done: Number(ml.done), error: Number(ml.error) },
           },
           diagnostics: {

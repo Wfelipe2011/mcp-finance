@@ -59,30 +59,18 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
     }
   }
 
-  const inserted = toEnqueue.length > 0 ? await rootDb.digest_jobs.enqueue(toEnqueue) : 0;
-
-  // Resetar jobs com status 'error' para 'pending' para que sejam reprocessados
-  let reset = 0;
-  if (toEnqueue.length > inserted) {
-    for (const t of toEnqueue) {
-      const rows = await sql`
-        UPDATE digest_jobs
-        SET status = 'pending', started_at = NULL, worker_id = NULL, finished_at = NULL
-        WHERE tenant_id = ${t.id}::uuid
-          AND year = ${t.year}
-          AND month = ${t.month}
-          AND status = 'error'
-        RETURNING id
-      `;
-      reset += rows.length;
-    }
+  let inserted = 0;
+  for (const t of toEnqueue) {
+    const refDate = `${t.year}-${String(t.month).padStart(2, "0")}-01`;
+    const ok = await rootDb.jobQueue.enqueue("digest", t.id, { year: t.year, month: t.month }, refDate, 20);
+    if (ok) inserted++;
   }
 
   const months = [...new Set(toEnqueue.map((t) => `${t.year}-${String(t.month).padStart(2, "0")}`))]
     .sort();
 
   return jsonResponse({
-    enqueued: inserted + reset,
+    enqueued: inserted,
     eligible: toEnqueue.length,
     coverage_min: DIGEST_COVERAGE_MIN,
     months,
@@ -102,7 +90,23 @@ export async function handleEnrichEnqueue(req: Request, sql: SQL): Promise<Respo
   let enqueued = 0;
   for (const id of tenantIds) {
     try {
-      enqueued += await db.enrich_jobs.enqueue(id, []);
+      const txRows = await sql.begin(async (tx) => {
+        await tx`SELECT set_config('app.tenant_id', ${id}, true)`;
+        return tx<{ date: string; transaction_id: string }[]>`
+          SELECT t.date::text AS date, t.id AS transaction_id
+          FROM transactions t
+          WHERE t.tenant_id = ${id}::uuid
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_transaction_insights ai WHERE ai.transaction_id = t.id
+            )
+          ORDER BY t.date DESC
+        `;
+      });
+      for (const tx of txRows) {
+        const txDate = tx.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+        const ok = await db.jobQueue.enqueue("enrich", id, { transaction_id: tx.transaction_id, date: txDate }, txDate, 10);
+        if (ok) enqueued++;
+      }
     } catch {
       // segue com os demais tenants
     }
@@ -116,8 +120,8 @@ export async function handleDigestQueueStats(req: Request, sql: SQL): Promise<Re
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
   const db = new BunPgAdapter(undefined, sql);
-  const stats = await db.digest_jobs.getQueueStats();
-  return jsonResponse(stats);
+  const stats = await db.jobQueue.getStatsByType("digest");
+  return jsonResponse(stats[0] ?? { job_type: "digest", pending: 0, running: 0, done: 0, error: 0, skipped: 0 });
 }
 
 // ── Forecast Queue ─────────────────────────────────────────────────────────
@@ -130,8 +134,11 @@ export async function handleForecastEnqueue(req: Request, sql: SQL): Promise<Res
   const tenantIds = await db.getActiveTenantsIds();
   const today = new Date().toISOString().slice(0, 10);
 
-  const tenants = tenantIds.map((id) => ({ id }));
-  const inserted = tenants.length > 0 ? await db.forecast_jobs.enqueue(tenants, today) : 0;
+  let inserted = 0;
+  for (const id of tenantIds) {
+    const ok = await db.jobQueue.enqueue("forecast", id, { job_date: today }, today, 30);
+    if (ok) inserted++;
+  }
 
   return jsonResponse({ enqueued: inserted, date: today });
 }
@@ -141,8 +148,8 @@ export async function handleForecastQueueStats(req: Request, sql: SQL): Promise<
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
   const db = new BunPgAdapter(undefined, sql);
-  const stats = await db.forecast_jobs.getQueueStats();
-  return jsonResponse(stats);
+  const stats = await db.jobQueue.getStatsByType("forecast");
+  return jsonResponse(stats[0] ?? { job_type: "forecast", pending: 0, running: 0, done: 0, error: 0, skipped: 0 });
 }
 
 // ── Daily Insight Queue ────────────────────────────────────────────────────
@@ -157,13 +164,8 @@ export async function handleDailyInsightEnqueue(req: Request, sql: SQL): Promise
 
   let inserted = 0;
   for (const tenantId of tenantIds) {
-    const rows = await sql`
-      INSERT INTO daily_insight_jobs (tenant_id, job_date)
-      VALUES (${tenantId}::uuid, ${today}::date)
-      ON CONFLICT (tenant_id, job_date) DO NOTHING
-      RETURNING id
-    `;
-    inserted += rows.length;
+    const ok = await db.jobQueue.enqueue("daily_insight", tenantId, { job_date: today }, today, 0);
+    if (ok) inserted++;
   }
 
   return jsonResponse({ enqueued: inserted, tenants: tenantIds.length, date: today });
@@ -173,15 +175,7 @@ export async function handleDailyInsightQueueStats(req: Request, sql: SQL): Prom
   const auth = await requireSuperAdmin(req);
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
-  const rows = await sql<{ status: string; cnt: string }[]>`
-    SELECT status, COUNT(*) AS cnt FROM daily_insight_jobs GROUP BY status
-  `;
-  const c: Record<string, number> = {};
-  for (const r of rows) c[r.status] = parseInt(r.cnt, 10);
-  return jsonResponse({
-    pending: c['pending'] ?? 0,
-    running: c['running'] ?? 0,
-    done:    c['done']    ?? 0,
-    error:   c['error']  ?? 0,
-  });
+  const db = new BunPgAdapter(undefined, sql);
+  const stats = await db.jobQueue.getStatsByType("daily_insight");
+  return jsonResponse(stats[0] ?? { job_type: "daily_insight", pending: 0, running: 0, done: 0, error: 0, skipped: 0 });
 }

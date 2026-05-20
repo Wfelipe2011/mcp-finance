@@ -35,7 +35,12 @@ async function runDigestCron(): Promise<void> {
   }
 
   if (toEnqueue.length > 0) {
-    const inserted = await rootDb.digest_jobs.enqueue(toEnqueue);
+    let inserted = 0;
+    for (const t of toEnqueue) {
+      const refDate = `${t.year}-${String(t.month).padStart(2, "0")}-01`;
+      const ok = await rootDb.jobQueue.enqueue("digest", t.id, { year: t.year, month: t.month }, refDate, 20);
+      if (ok) inserted++;
+    }
     console.log(`[cron] enqueued ${inserted} new digest job(s) (${toEnqueue.length} eligible tenant(s))`);
   }
 

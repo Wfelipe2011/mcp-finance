@@ -9,7 +9,7 @@
     "sync": "bun run src/scripts/sync.ts",
     "cron": "bun run src/application/cron/digest-cron.ts",
     "forecast-cron": "bun run src/application/cron/forecast-cron.ts",
-    "worker": "bun run src/application/workers/enrich-worker.ts",
+    "unified-worker": "bun run src/application/workers/unified-worker.ts",
     "web:dev": "bun run src/application/web/server.ts",
     "web:start": "bun run src/application/web/server.ts",
     "supervisor": "bun run src/application/supervisor/supervisor.ts",

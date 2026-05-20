@@ -69,8 +69,8 @@ function spawnWorker(worker: WorkerRow): ReturnType<typeof Bun.spawn> {
   };
   if (worker.ai_api_key) env["AI_API_KEY"] = worker.ai_api_key;
 
-  // Todos os workers ativos executam o shared-worker (multi-fila: enrich, digest, forecast)
-  const script = "src/application/workers/shared-worker.ts";
+  // Todos os workers ativos executam a fila unificada por prioridade.
+  const script = "src/application/workers/unified-worker.ts";
 
   const proc = Bun.spawn(
     ["bun", "run", script],

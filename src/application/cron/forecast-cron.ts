@@ -13,8 +13,11 @@ async function runForecastCron(): Promise<void> {
     `[forecast-cron] Starting enqueue for ${today} — ${tenantIds.length} active tenant(s)`
   );
 
-  const tenants = tenantIds.map((id) => ({ id }));
-  const inserted = await rootDb.forecast_jobs.enqueue(tenants, today);
+  let inserted = 0;
+  for (const id of tenantIds) {
+    const ok = await rootDb.jobQueue.enqueue("forecast", id, { job_date: today }, today, 30);
+    if (ok) inserted++;
+  }
   console.log(`[forecast-cron] enqueued ${inserted} new forecast job(s)`);
 
   await rootDb.close();

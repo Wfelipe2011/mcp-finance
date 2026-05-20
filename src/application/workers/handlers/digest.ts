@@ -1,42 +1,35 @@
-import { BunPgAdapter } from "../../infrastructure/db/BunPgAdapter.ts";
-import { generateDigest } from "../../infrastructure/ai/digestAgent.ts";
-import { isDigestEligible } from "../../domain/digest-policy.ts";
-
-const WORKER_ID = process.env["WORKER_ID"];
-if (!WORKER_ID) throw new Error("WORKER_ID env var is required");
-const workerId: string = WORKER_ID;
+import { BunPgAdapter } from "../../../infrastructure/db/BunPgAdapter.ts";
+import { generateDigest } from "../../../infrastructure/ai/digestAgent.ts";
+import { isDigestEligible } from "../../../domain/digest-policy.ts";
 
 const AI_MODEL = process.env["AI_MODEL"] ?? "gemma-4";
 
-// Worker uses BunPgAdapter without tenantId — digest_jobs has no RLS
-const db = new BunPgAdapter();
+export interface DigestPayload {
+  year: number;
+  month: number;
+}
 
-console.log(`[digest-worker:${workerId}] starting`);
+export type HandlerResult =
+  | { result: "done" }
+  | { result: "skipped" }
+  | { result: "error"; error: string };
 
-async function loop(): Promise<void> {
-  // Release stuck jobs from dead workers before picking next job
-  await db.digest_jobs.releaseStuck();
-
-  const job = await db.digest_jobs.nextJob(workerId);
-
-  if (!job) {
-    await Bun.sleep(10_000);
-    return loop();
+export async function handleDigest(
+  _db: BunPgAdapter,
+  tenantId: string,
+  payload: DigestPayload,
+): Promise<HandlerResult> {
+  const { year, month } = payload;
+  if (!year || !month) {
+    return { result: "error", error: "payload missing year or month" };
   }
-
-  const { id: jobId, tenant_id: tenantId, year, month } = job;
-
-  console.log(`[digest-worker:${workerId}] job=${jobId} tenant=${tenantId} ${year}-${String(month).padStart(2, "0")}`);
 
   const dbTenant = new BunPgAdapter(tenantId);
   try {
-    // Safety net: verify coverage is still >= 80%
     const coverage = await dbTenant.getDigestCoverage(year, month);
 
     if (!isDigestEligible(coverage.enriched, coverage.total)) {
-      console.log(`[digest-worker:${workerId}] job=${jobId} coverage=${coverage.enriched}/${coverage.total} < 80% — skipping`);
-      await db.digest_jobs.markSkipped(jobId);
-      return loop();
+      return { result: "skipped" };
     }
 
     const insights = await dbTenant.aiDigests.getMonthInsights(year, month);
@@ -82,17 +75,10 @@ async function loop(): Promise<void> {
       ...digestResult,
     });
 
-    await db.digest_jobs.markDone(jobId);
-    console.log(`[digest-worker:${workerId}] done job=${jobId}`);
+    return { result: "done" };
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[digest-worker:${workerId}] job=${jobId} error: ${errMsg}`);
-    await db.digest_jobs.markError(jobId, errMsg);
+    return { result: "error", error: err instanceof Error ? err.message : String(err) };
   } finally {
     await dbTenant.close();
   }
-
-  return loop();
 }
-
-await loop();
