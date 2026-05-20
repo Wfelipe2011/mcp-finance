@@ -404,3 +404,70 @@ SELECT
   r.recurrence_period    AS period
 FROM recorrentes r
 ORDER BY tipo, valor DESC;
+
+
+-- ────────────────────────────────────────────────
+-- goals_progress_view
+-- Metas financeiras com progresso calculado
+-- Para metas 'saving': progress_ratio = current_amount / target_amount
+-- Para metas 'spending': progress_ratio = gastos_mes_corrente / target_amount
+-- Retorna apenas metas com status = 'active'
+-- ────────────────────────────────────────────────
+CREATE OR REPLACE VIEW goals_progress_view WITH (security_invoker = true) AS
+WITH base AS (
+  SELECT
+    g.id,
+    g.tenant_id,
+    g.name,
+    g.goal_type,
+    g.target_amount,
+    g.current_amount,
+    g.category_group,
+    g.deadline,
+    g.status,
+    g.notes,
+    g.created_at,
+    CASE
+      WHEN g.goal_type = 'spending' THEN
+        COALESCE(cgm.total_gastos, 0) / g.target_amount
+      ELSE
+        LEAST(g.current_amount / g.target_amount, 1.0)
+    END AS progress_ratio,
+    CASE
+      WHEN g.deadline IS NOT NULL THEN (g.deadline - CURRENT_DATE)
+      ELSE NULL
+    END AS days_remaining,
+    CASE
+      WHEN g.goal_type = 'saving' AND g.current_amount >= g.target_amount THEN false
+      WHEN g.deadline IS NOT NULL AND g.deadline < CURRENT_DATE THEN true
+      ELSE false
+    END AS is_overdue
+  FROM financial_goals g
+  LEFT JOIN (
+    SELECT
+      group_pt,
+      SUM(total_gastos) AS total_gastos
+    FROM cube_gastos_mensais
+    WHERE year = EXTRACT(YEAR FROM CURRENT_DATE)::INT
+      AND month = EXTRACT(MONTH FROM CURRENT_DATE)::INT
+    GROUP BY group_pt
+  ) cgm ON cgm.group_pt = g.category_group AND g.goal_type = 'spending'
+  WHERE g.status = 'active'
+)
+SELECT
+  id,
+  tenant_id,
+  name,
+  goal_type,
+  target_amount,
+  current_amount,
+  category_group,
+  deadline,
+  status,
+  notes,
+  created_at,
+  progress_ratio,
+  days_remaining,
+  is_overdue,
+  progress_ratio * 100 AS progress_pct
+FROM base;

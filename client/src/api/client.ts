@@ -19,6 +19,8 @@ import type {
   DailyInsight,
   CategoryExclusion,
   MessagesRange,
+  Goal,
+  GoalType,
 } from "./types.ts";
 
 const BASE = "";
@@ -242,4 +244,57 @@ export async function regenerateDailyInsight(): Promise<DailyInsight> {
     throw Object.assign(new Error((body as { error?: string }).error ?? res.statusText), { status: res.status });
   }
   return res.json() as Promise<DailyInsight>;
+}
+
+export function fetchGoals(): Promise<Goal[]> {
+  return get<Goal[]>("/api/goals");
+}
+
+export interface CreateGoalData {
+  name: string;
+  goal_type: GoalType;
+  target_amount: number;
+  category_group?: string;
+  deadline?: string;
+  notes?: string;
+}
+
+export async function createGoal(data: CreateGoalData): Promise<Goal> {
+  const res = await fetch("/api/goals", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<Goal>;
+}
+
+export async function updateGoal(id: number, data: Partial<Pick<Goal, 'name' | 'current_amount' | 'deadline' | 'status' | 'notes' | 'target_amount'>>): Promise<Goal> {
+  const res = await fetch(`/api/goals/${id}`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<Goal>;
+}
+
+export async function deleteGoal(id: number): Promise<void> {
+  const res = await fetch(`/api/goals/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
 }

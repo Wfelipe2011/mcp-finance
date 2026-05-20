@@ -88,6 +88,27 @@ export interface ForecastJob {
 
 
 
+export interface GoalRow {
+  id: number;
+  tenant_id: string;
+  name: string;
+  goal_type: 'saving' | 'spending';
+  target_amount: number;
+  current_amount: number;
+  category_group: string | null;
+  deadline: string | null;
+  status: 'active' | 'achieved' | 'abandoned';
+  notes: string | null;
+  created_at: string;
+}
+
+export interface GoalProgressRow extends GoalRow {
+  progress_ratio: number;
+  progress_pct: number;
+  days_remaining: number | null;
+  is_overdue: boolean;
+}
+
 export interface SimpleQueueStats {
   pending: number;
   running: number;
@@ -277,6 +298,13 @@ export class BunPgAdapter {
   readonly aiInsights: AiInsightsRepository;
   readonly aiDigests: AiDigestsRepository;
   readonly forecast: ForecastRepository;
+  readonly goals: {
+    getAll(): Promise<GoalProgressRow[]>;
+    create(data: Omit<GoalRow, 'id' | 'tenant_id' | 'created_at'>): Promise<GoalRow>;
+    update(id: number, data: Partial<Pick<GoalRow, 'name' | 'current_amount' | 'deadline' | 'status' | 'notes' | 'target_amount'>>): Promise<GoalRow | null>;
+    remove(id: number): Promise<void>;
+    getActiveForDigest(): Promise<GoalProgressRow[]>;
+  };
   readonly users: {
     getAll(): Promise<{ id: number; name: string; display_name: string }[]>;
     updateDisplayName(id: number, displayName: string): Promise<{ id: number; name: string; display_name: string } | null>;
@@ -1173,6 +1201,91 @@ export class BunPgAdapter {
             RETURNING id, name, display_name
           `;
           return rows[0] ?? null;
+        });
+      },
+    };
+
+    // ── goals ─────────────────────────────────────────────────────────────────
+    this.goals = {
+      async getAll() {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<GoalProgressRow[]>`
+            SELECT id, tenant_id, name, goal_type, target_amount::float8 AS target_amount,
+                   current_amount::float8 AS current_amount, category_group, deadline::text AS deadline, status,
+                   notes, created_at::text AS created_at, progress_ratio::float8 AS progress_ratio,
+                   progress_pct::float8 AS progress_pct,
+                   days_remaining, is_overdue
+            FROM goals_progress_view
+            ORDER BY deadline ASC NULLS LAST, created_at ASC
+          `;
+          return rows;
+        });
+      },
+      async create(data) {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<GoalRow[]>`
+            INSERT INTO financial_goals (tenant_id, name, goal_type, target_amount, current_amount, category_group, deadline, status, notes)
+            VALUES (
+              ${tid}::uuid, ${data.name}, ${data.goal_type},
+              ${data.target_amount}, ${data.current_amount ?? 0},
+              ${data.category_group ?? null}, ${data.deadline ?? null},
+              ${data.status ?? 'active'}, ${data.notes ?? null}
+            )
+            RETURNING id, tenant_id, name, goal_type, target_amount::float8 AS target_amount,
+                      current_amount::float8 AS current_amount, category_group, deadline::text AS deadline, status,
+                      notes, created_at::text AS created_at
+          `;
+          return rows[0]!;
+        });
+      },
+      async update(id, data) {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const sets: string[] = [];
+          const vals: unknown[] = [];
+          if (data.name !== undefined)           { sets.push(`name = $${sets.length + 1}`);           vals.push(data.name); }
+          if (data.current_amount !== undefined) { sets.push(`current_amount = $${sets.length + 1}`); vals.push(data.current_amount); }
+          if (data.target_amount !== undefined)  { sets.push(`target_amount = $${sets.length + 1}`);  vals.push(data.target_amount); }
+          if (data.deadline !== undefined)       { sets.push(`deadline = $${sets.length + 1}`);       vals.push(data.deadline); }
+          if (data.status !== undefined)         { sets.push(`status = $${sets.length + 1}`);         vals.push(data.status); }
+          if (data.notes !== undefined)          { sets.push(`notes = $${sets.length + 1}`);          vals.push(data.notes); }
+          if (sets.length === 0) {
+            const rows = await tx<GoalRow[]>`
+              SELECT id, tenant_id, name, goal_type, target_amount::float8 AS target_amount,
+                     current_amount::float8 AS current_amount, category_group, deadline::text AS deadline, status,
+                     notes, created_at::text AS created_at
+              FROM financial_goals WHERE id = ${id}
+            `;
+            return rows[0] ?? null;
+          }
+          vals.push(id);
+          const query = `UPDATE financial_goals SET ${sets.join(", ")} WHERE id = $${vals.length} RETURNING id, tenant_id, name, goal_type, target_amount::float8 AS target_amount, current_amount::float8 AS current_amount, category_group, deadline::text AS deadline, status, notes, created_at::text AS created_at`;
+          const rows = await tx.unsafe(query, vals as string[]) as GoalRow[];
+          return rows[0] ?? null;
+        });
+      },
+      async remove(id) {
+        await sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          await tx`DELETE FROM financial_goals WHERE id = ${id}`;
+        });
+      },
+      async getActiveForDigest() {
+        return sql.begin(async (tx) => {
+          if (tid) await tx`SELECT set_config('app.tenant_id', ${tid}, true)`;
+          const rows = await tx<GoalProgressRow[]>`
+            SELECT id, tenant_id, name, goal_type, target_amount::float8 AS target_amount,
+                   current_amount::float8 AS current_amount, category_group, deadline::text AS deadline, status,
+                   notes, created_at::text AS created_at, progress_ratio::float8 AS progress_ratio,
+                   progress_pct::float8 AS progress_pct,
+                   days_remaining, is_overdue
+            FROM goals_progress_view
+            ORDER BY deadline ASC NULLS LAST, created_at ASC
+            LIMIT 5
+          `;
+          return rows;
         });
       },
     };

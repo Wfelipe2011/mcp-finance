@@ -41,6 +41,7 @@ async function loop(): Promise<void> {
 
     const insights = await dbTenant.aiDigests.getMonthInsights(year, month);
     const previousDigests = await dbTenant.aiDigests.getPreviousDigests(year, month, 3);
+    const activeGoals = await dbTenant.goals.getActiveForDigest();
 
     const cashflow_real = insights
       .filter((r) => !r.is_debt_related)
@@ -65,6 +66,7 @@ async function loop(): Promise<void> {
       enrichment_coverage,
       insights,
       previousDigests,
+      activeGoals,
     });
 
     await dbTenant.upsertDigest(year, month, {

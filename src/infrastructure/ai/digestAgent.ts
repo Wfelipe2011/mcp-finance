@@ -1,7 +1,7 @@
 import { createAgent, SystemMessage, HumanMessage } from "langchain";
 import { model } from "./model.ts";
 import { MonthlyDigestSchema, type MonthlyDigest } from "./schemas/MonthlyDigestSchema.ts";
-import type { MonthInsightRow, PreviousDigestRow } from "../db/BunPgAdapter.ts";
+import type { MonthInsightRow, PreviousDigestRow, GoalProgressRow } from "../db/BunPgAdapter.ts";
 
 // Agent 1: free-form analysis — no responseFormat so model responds in plain text
 const agentAnalyze = createAgent({ model });
@@ -21,6 +21,7 @@ interface DigestInput {
   enrichment_coverage: number;
   insights: MonthInsightRow[];
   previousDigests: PreviousDigestRow[];
+  activeGoals?: GoalProgressRow[];
 }
 
 const MONTH_NAMES: Record<number, string> = {
@@ -49,6 +50,16 @@ export async function generateDigest(input: DigestInput): Promise<MonthlyDigest>
         .join("\n")
     : "";
 
+  const goalsSection = input.activeGoals && input.activeGoals.length > 0
+    ? `\nMETAS FINANCEIRAS:\n` +
+      input.activeGoals.map((g) => {
+        const pct = (Number(g.progress_ratio) * 100).toFixed(1);
+        const prazo = g.deadline ? `prazo: ${g.deadline}` : "sem prazo";
+        const vencido = g.is_overdue ? " [VENCIDA]" : "";
+        return `- ${g.name} (${g.goal_type}): ${pct}% concluído | ${prazo}${vencido}`;
+      }).join("\n")
+    : "";
+
   // ── Agent 1: free-form financial analysis ─────────────────────────────────
   const analysisResult = await agentAnalyze.invoke({
     messages: [
@@ -66,7 +77,7 @@ MÉTRICAS CALCULADAS:
 - Cobertura de enriquecimento: ${(input.enrichment_coverage * 100).toFixed(1)}%
 
 TRANSAÇÕES NOTÁVEIS (anomaly_score > 0.6):
-${notableItems.length > 0 ? notableItems.join("\n") : "Nenhuma transação com anomalia alta detectada"}${historySection}`
+${notableItems.length > 0 ? notableItems.join("\n") : "Nenhuma transação com anomalia alta detectada"}${historySection}${goalsSection}`
       ),
     ],
   });

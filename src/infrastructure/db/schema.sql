@@ -559,6 +559,32 @@ ALTER TABLE tenant_members FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant_members
   USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
 
+-- ────────────────────────────────────────────────
+-- financial_goals (metas financeiras por tenant)
+-- ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS financial_goals (
+  id             SERIAL PRIMARY KEY,
+  tenant_id      UUID NOT NULL REFERENCES tenants(id),
+  name           TEXT NOT NULL,
+  goal_type      TEXT NOT NULL CHECK (goal_type IN ('saving', 'spending')),
+  target_amount  NUMERIC(12,2) NOT NULL CHECK (target_amount > 0),
+  current_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  category_group TEXT NULL,
+  deadline       DATE NULL,
+  status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'achieved', 'abandoned')),
+  notes          TEXT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_financial_goals_tenant_status
+  ON financial_goals (tenant_id, status);
+
+-- financial_goals
+ALTER TABLE financial_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial_goals FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON financial_goals
+  USING (tenant_id = current_setting('app.tenant_id', true)::UUID);
+
 -- Note: enrich_jobs and workers do NOT have RLS — workers need cross-tenant visibility
 
 -- ════════════════════════════════════════════════

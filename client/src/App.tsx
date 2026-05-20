@@ -7,6 +7,7 @@ import { Gastos } from "./tabs/Gastos.tsx";
 import { ProximoMes } from "./tabs/ProximoMes.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
 import IaScreen from "./tabs/IaScreen.tsx";
+import { Metas } from "./tabs/Metas.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest } from "./api/types.ts";
 import type { AppColorMode } from "./theme.ts";
@@ -23,13 +24,14 @@ function isTokenValid(token: string): boolean {
   }
 }
 
-type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia";
+type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas";
 
 const NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "resumo", label: "Resumo", icon: "🏠" },
   { id: "gastos", label: "Gastos", icon: "🧾" },
   { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
   { id: "investimentos", label: "Investimentos", icon: "📈" },
+  { id: "metas", label: "Metas", icon: "🎯" },
   { id: "ia", label: "IA", icon: "✨" },
 ];
 
@@ -131,6 +133,8 @@ export function App() {
         return <ProximoMes />;
       case "investimentos":
         return selectedMonth ? <Investimentos month={selectedMonth} /> : null;
+      case "metas":
+        return <Metas />;
       case "ia":
         return <IaScreen />;
       default:

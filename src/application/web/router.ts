@@ -18,6 +18,7 @@ import { handleTendencias } from "./routes/tendencias.ts";
 import { handleLogin } from "./routes/auth.ts";
 import { handleSync } from "./routes/sync.ts";
 import { handleGetUsers, handleUpdateUser } from "./routes/users.ts";
+import { handleGetGoals, handleCreateGoal, handleUpdateGoal, handleDeleteGoal } from "./routes/goals.ts";
 import { handleForecastGroups } from "./routes/forecast/groups.ts";
 import { handleForecastCategories } from "./routes/forecast/categories.ts";
 import { handleForecastMessage } from "./routes/forecast/message.ts";
@@ -51,6 +52,10 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/sync" && req.method === "POST") return handleSync(req, tenantId, sql);
   if (path === "/api/users" && req.method === "GET") return handleGetUsers(req, tenantId, sql);
   if (path.startsWith("/api/users/") && req.method === "PATCH") return handleUpdateUser(req, url, tenantId, sql);
+  if (path === "/api/goals" && req.method === "GET") return handleGetGoals(req, tenantId, sql);
+  if (path === "/api/goals" && req.method === "POST") return handleCreateGoal(req, tenantId, sql);
+  if (path.startsWith("/api/goals/") && req.method === "PUT") return handleUpdateGoal(req, url, tenantId, sql);
+  if (path.startsWith("/api/goals/") && req.method === "DELETE") return handleDeleteGoal(req, url, tenantId, sql);
   if (path === "/api/cashflow" && req.method === "GET") return handleCashflow(req, url, tenantId, sql);
   if (path === "/api/cashflow/projetado" && req.method === "GET") return handleCashflowProjetado(req, url, tenantId, sql);
   if (path === "/api/gastos" && req.method === "GET") return handleGastos(req, url, tenantId, sql);

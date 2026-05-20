@@ -4,6 +4,27 @@ export interface User {
   display_name: string;
 }
 
+export type GoalType = 'saving' | 'spending';
+export type GoalStatus = 'active' | 'achieved' | 'abandoned';
+
+export interface Goal {
+  id: number;
+  tenant_id: string;
+  name: string;
+  goal_type: GoalType;
+  target_amount: number;
+  current_amount: number;
+  category_group: string | null;
+  deadline: string | null;
+  status: GoalStatus;
+  notes: string | null;
+  created_at: string;
+  progress_ratio: number;
+  progress_pct: number;
+  days_remaining: number | null;
+  is_overdue: boolean;
+}
+
 export interface CashflowMensal {
   year: number;
   month: number;
