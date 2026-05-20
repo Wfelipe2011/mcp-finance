@@ -16,6 +16,9 @@ import type { AppColorMode } from "./theme.ts";
 const Credito = lazy(() =>
   import("./tabs/Credito.tsx").then((module) => ({ default: module.Credito })),
 );
+const Simulacao = lazy(() =>
+  import("./tabs/Simulacao.tsx").then((module) => ({ default: module.Simulacao })),
+);
 
 function isTokenValid(token: string): boolean {
   try {
@@ -44,7 +47,7 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "admin";
+type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "simulacao" | "admin";
 
 const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "resumo", label: "Resumo", icon: "🏠" },
@@ -52,6 +55,7 @@ const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
   { id: "investimentos", label: "Investimentos", icon: "📈" },
   { id: "metas", label: "Metas", icon: "🎯" },
+  { id: "simulacao", label: "Simulação", icon: "🔮" },
   { id: "credito", label: "Crédito", icon: "💳" },
   { id: "ia", label: "IA", icon: "✨" },
 ];
@@ -167,6 +171,12 @@ export function App() {
         return selectedMonth ? <Investimentos month={selectedMonth} /> : null;
       case "metas":
         return <Metas />;
+      case "simulacao":
+        return (
+          <Suspense fallback={<div className="loading loading-spinner m-4" />}>
+            <Simulacao />
+          </Suspense>
+        );
       case "credito":
         return (
           <Suspense fallback={<div className="loading loading-spinner m-4" />}>

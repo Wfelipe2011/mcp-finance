@@ -345,12 +345,85 @@ export interface ParcelaTimeline {
   breakdown: ParcelaTimelineBreakdown[];
 }
 
+export interface SimulationRow {
+  id: string;
+  tenant_id: string;
+  name: string;
+  status: 'open' | 'closed';
+  horizon_months: number;
+  llm_message: string | null;
+  llm_model: string | null;
+  llm_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SimulationItemRow {
+  id: string;
+  simulation_id: string;
+  tenant_id: string;
+  item_type: 'new_purchase' | 'recurring' | 'income_adjustment' | 'exclusion';
+  label: string;
+  category_pt: string | null;
+  total_amount: number | null;
+  installments: number | null;
+  monthly_amount: number | null;
+  is_exclusion: boolean;
+  excluded_transaction_ids: string[] | null;
+  direction: 'income' | 'expense' | null;
+}
+
+export interface SimulationMonthRow {
+  simulation_id: string;
+  tenant_id: string;
+  month_offset: number;
+  year: number;
+  month: number;
+  total_income: number;
+  total_expenses: number;
+  balance: number;
+}
+
+export interface SimulationWithDetails extends SimulationRow {
+  items: SimulationItemRow[];
+  months: SimulationMonthRow[];
+}
+
+export interface HistoricalAverage {
+  category_pt: string;
+  avg_monthly: number;
+  is_income: boolean;
+}
+
+export interface ActiveCommitment {
+  description: string;
+  monthly_amount: number;
+  remaining_months: number;
+  category_pt: string | null;
+}
+
 function parseJsonbField<T>(value: unknown): T | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "string") {
     try { return JSON.parse(value) as T; } catch { return null; }
   }
   return value as T;
+}
+
+function toPgTextArrayLiteral(values: string[] | null | undefined): string | null {
+  if (!values || values.length === 0) return null;
+  const escaped = values.map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+  return `{${escaped.join(",")}}`;
+}
+
+function parseTextArray(value: unknown): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("{") || !value.endsWith("}")) return null;
+  const content = value.slice(1, -1);
+  if (!content) return [];
+  return content.split(",").map((item) => item.replace(/^"|"$/g, "").replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
 }
 
 export class BunPgAdapter {
@@ -2669,6 +2742,268 @@ export class BunPgAdapter {
         total_parcelas_mes: Number(r.total_parcelas_mes),
         breakdown: parseJsonbField<ParcelaTimelineBreakdown[]>(r.breakdown) ?? [],
       }));
+    });
+  }
+
+  // ── simulations ────────────────────────────────────────────────────────────
+
+  async getHistoricalAverages(horizonMonths: number, excludedIds: string[]): Promise<HistoricalAverage[]> {
+    return this.withTenant(async (q) => {
+      // Calcula médias mensais por categoria excluindo transações atípicas
+      const hasExclusions = excludedIds.length > 0;
+      const excludedArray = toPgTextArrayLiteral(excludedIds);
+      let rows: { category_pt: string; avg_monthly: string; is_income: boolean }[];
+
+      if (hasExclusions) {
+        rows = await q<{ category_pt: string; avg_monthly: string; is_income: boolean }[]>`
+          WITH monthly AS (
+            SELECT
+              dd.year, dd.month,
+              COALESCE(dc.category_pt, fc.category_pt, 'Sem Categoria') AS category_pt,
+              fc.transaction_kind,
+              SUM(ABS(fc.amount_signed)) AS total
+            FROM f_fluxo_caixa fc
+            INNER JOIN d_data dd ON dd.data = fc.date_day
+            LEFT JOIN d_categoria dc ON dc.category_id = fc.category_id
+            WHERE fc.transaction_id <> ALL(${excludedArray}::text[])
+              AND (dd.year * 12 + dd.month) >= (EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int - ${horizonMonths})
+              AND (dd.year * 12 + dd.month) < (EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int)
+            GROUP BY dd.year, dd.month, COALESCE(dc.category_pt, fc.category_pt, 'Sem Categoria'), fc.transaction_kind
+          )
+          SELECT
+            category_pt,
+            ROUND(AVG(total)::NUMERIC, 2) AS avg_monthly,
+            (MAX(transaction_kind) = 'INCOME') AS is_income
+          FROM monthly
+          GROUP BY category_pt, transaction_kind
+          ORDER BY avg_monthly DESC
+        `;
+      } else {
+        rows = await q<{ category_pt: string; avg_monthly: string; is_income: boolean }[]>`
+          WITH monthly AS (
+            SELECT
+              dd.year, dd.month,
+              COALESCE(dc.category_pt, fc.category_pt, 'Sem Categoria') AS category_pt,
+              fc.transaction_kind,
+              SUM(ABS(fc.amount_signed)) AS total
+            FROM f_fluxo_caixa fc
+            INNER JOIN d_data dd ON dd.data = fc.date_day
+            LEFT JOIN d_categoria dc ON dc.category_id = fc.category_id
+            WHERE (dd.year * 12 + dd.month) >= (EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int - ${horizonMonths})
+              AND (dd.year * 12 + dd.month) < (EXTRACT(YEAR FROM NOW())::int * 12 + EXTRACT(MONTH FROM NOW())::int)
+            GROUP BY dd.year, dd.month, COALESCE(dc.category_pt, fc.category_pt, 'Sem Categoria'), fc.transaction_kind
+          )
+          SELECT
+            category_pt,
+            ROUND(AVG(total)::NUMERIC, 2) AS avg_monthly,
+            (MAX(transaction_kind) = 'INCOME') AS is_income
+          FROM monthly
+          GROUP BY category_pt, transaction_kind
+          ORDER BY avg_monthly DESC
+        `;
+      }
+      return rows.map(r => ({
+        category_pt: r.category_pt,
+        avg_monthly: Number(r.avg_monthly),
+        is_income: r.is_income,
+      }));
+    });
+  }
+
+  async getActiveCommitmentsForSimulation(): Promise<ActiveCommitment[]> {
+    return this.withTenant(async (q) => {
+      const rows = await q<{
+        description: string;
+        amount: string;
+        total_installments: number;
+        installment_atual: number;
+        category_pt: string | null;
+      }[]>`
+        SELECT description, amount, total_installments, installment_atual, category_pt
+        FROM cube_compromissos_ativos
+        ORDER BY compromisso_restante DESC
+        LIMIT 50
+      `;
+      return rows.map(r => ({
+        description: r.description,
+        monthly_amount: Number(r.amount),
+        remaining_months: r.total_installments - r.installment_atual,
+        category_pt: r.category_pt,
+      }));
+    });
+  }
+
+  async createSimulation(data: {
+    name: string;
+    horizon_months: number;
+    llm_message?: string | null;
+    llm_model?: string | null;
+  }): Promise<SimulationRow> {
+    return this.withTenant(async (q) => {
+      const llmGeneratedAt = data.llm_message ? new Date().toISOString() : null;
+      const rows = await q<SimulationRow[]>`
+        INSERT INTO simulations (tenant_id, name, status, horizon_months, llm_message, llm_model, llm_generated_at)
+        VALUES (
+          ${this.tenantId}::uuid, ${data.name}, 'open', ${data.horizon_months},
+          ${data.llm_message ?? null}, ${data.llm_model ?? null},
+          ${llmGeneratedAt}
+        )
+        RETURNING id, tenant_id, name, status, horizon_months, llm_message, llm_model,
+                  llm_generated_at::text AS llm_generated_at,
+                  created_at::text AS created_at, updated_at::text AS updated_at
+      `;
+      return rows[0]!;
+    });
+  }
+
+  async updateSimulation(data: {
+    id: string;
+    name: string;
+    horizon_months: number;
+    llm_message?: string | null;
+    llm_model?: string | null;
+  }): Promise<SimulationRow | null> {
+    return this.withTenant(async (q) => {
+      const llmGeneratedAt = data.llm_message ? new Date().toISOString() : null;
+      const rows = await q<SimulationRow[]>`
+        UPDATE simulations
+        SET name = ${data.name},
+            status = 'open',
+            horizon_months = ${data.horizon_months},
+            llm_message = ${data.llm_message ?? null},
+            llm_model = ${data.llm_model ?? null},
+            llm_generated_at = ${llmGeneratedAt},
+            updated_at = NOW()
+        WHERE id = ${data.id}::uuid
+        RETURNING id, tenant_id, name, status, horizon_months, llm_message, llm_model,
+                  llm_generated_at::text AS llm_generated_at,
+                  created_at::text AS created_at, updated_at::text AS updated_at
+      `;
+      return rows[0] ?? null;
+    });
+  }
+
+  async saveSimulationItems(
+    simulationId: string,
+    items: Omit<SimulationItemRow, 'id' | 'simulation_id' | 'tenant_id'>[],
+    options: { replace?: boolean } = {},
+  ): Promise<void> {
+    await this.withTenant(async (q) => {
+      if (options.replace) {
+        await q`DELETE FROM simulation_items WHERE simulation_id = ${simulationId}::uuid`;
+      }
+      for (const item of items) {
+        const excludedTransactionIds = toPgTextArrayLiteral(item.excluded_transaction_ids);
+        await q`
+          INSERT INTO simulation_items (simulation_id, tenant_id, item_type, label, category_pt,
+            total_amount, installments, monthly_amount, is_exclusion, excluded_transaction_ids, direction)
+          VALUES (
+            ${simulationId}::uuid, ${this.tenantId}::uuid, ${item.item_type}, ${item.label},
+            ${item.category_pt ?? null}, ${item.total_amount ?? null}, ${item.installments ?? null},
+            ${item.monthly_amount ?? null}, ${item.is_exclusion}, ${excludedTransactionIds}::text[],
+            ${item.direction ?? null}
+          )
+        `;
+      }
+    });
+  }
+
+  async saveSimulationMonths(simulationId: string, months: Omit<SimulationMonthRow, 'simulation_id' | 'tenant_id'>[]): Promise<void> {
+    if (months.length === 0) return;
+    await this.withTenant(async (q) => {
+      // Clear existing months before saving (for recalculation)
+      await q`DELETE FROM simulation_months WHERE simulation_id = ${simulationId}::uuid`;
+      for (const m of months) {
+        await q`
+          INSERT INTO simulation_months (simulation_id, tenant_id, month_offset, year, month, total_income, total_expenses, balance)
+          VALUES (
+            ${simulationId}::uuid, ${this.tenantId}::uuid,
+            ${m.month_offset}, ${m.year}, ${m.month},
+            ${m.total_income}, ${m.total_expenses}, ${m.balance}
+          )
+        `;
+      }
+    });
+  }
+
+  async getSimulations(): Promise<SimulationRow[]> {
+    return this.withTenant(async (q) => {
+      const rows = await q<SimulationRow[]>`
+        SELECT id, tenant_id, name, status, horizon_months, llm_message, llm_model,
+               llm_generated_at::text AS llm_generated_at,
+               created_at::text AS created_at, updated_at::text AS updated_at
+        FROM simulations
+        ORDER BY created_at DESC
+      `;
+      return rows;
+    });
+  }
+
+  async getSimulationById(id: string): Promise<SimulationWithDetails | null> {
+    return this.withTenant(async (q) => {
+      const sims = await q<SimulationRow[]>`
+        SELECT id, tenant_id, name, status, horizon_months, llm_message, llm_model,
+               llm_generated_at::text AS llm_generated_at,
+               created_at::text AS created_at, updated_at::text AS updated_at
+        FROM simulations WHERE id = ${id}::uuid
+      `;
+      const sim = sims[0];
+      if (!sim) return null;
+
+      const [items, monthRows] = await Promise.all([
+        q<{
+          id: string; simulation_id: string; tenant_id: string; item_type: string;
+          label: string; category_pt: string | null; total_amount: string | null;
+          installments: number | null; monthly_amount: string | null;
+          is_exclusion: boolean; excluded_transaction_ids: unknown; direction: string | null;
+        }[]>`
+          SELECT id, simulation_id, tenant_id, item_type, label, category_pt,
+                 total_amount, installments, monthly_amount, is_exclusion,
+                 excluded_transaction_ids, direction
+          FROM simulation_items WHERE simulation_id = ${id}::uuid
+          ORDER BY item_type, label
+        `,
+        q<{
+          simulation_id: string; tenant_id: string; month_offset: number;
+          year: number; month: number;
+          total_income: string; total_expenses: string; balance: string;
+        }[]>`
+          SELECT simulation_id, tenant_id, month_offset, year, month, total_income, total_expenses, balance
+          FROM simulation_months WHERE simulation_id = ${id}::uuid
+          ORDER BY month_offset ASC
+        `,
+      ]);
+
+      return {
+        ...sim,
+        items: items.map(r => ({
+          ...r,
+          item_type: r.item_type as SimulationItemRow['item_type'],
+          total_amount: r.total_amount !== null ? Number(r.total_amount) : null,
+          monthly_amount: r.monthly_amount !== null ? Number(r.monthly_amount) : null,
+          excluded_transaction_ids: parseTextArray(r.excluded_transaction_ids),
+          direction: r.direction as SimulationItemRow['direction'],
+        })),
+        months: monthRows.map(r => ({
+          ...r,
+          total_income: Number(r.total_income),
+          total_expenses: Number(r.total_expenses),
+          balance: Number(r.balance),
+        })),
+      };
+    });
+  }
+
+  async updateSimulationStatus(id: string, status: 'open' | 'closed'): Promise<SimulationRow | null> {
+    return this.withTenant(async (q) => {
+      const rows = await q<SimulationRow[]>`
+        UPDATE simulations SET status = ${status}, updated_at = NOW()
+        WHERE id = ${id}::uuid
+        RETURNING id, tenant_id, name, status, horizon_months, llm_message, llm_model,
+                  llm_generated_at::text AS llm_generated_at,
+                  created_at::text AS created_at, updated_at::text AS updated_at
+      `;
+      return rows[0] ?? null;
     });
   }
 

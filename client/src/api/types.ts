@@ -359,3 +359,79 @@ export interface DailyExclusion {
 export interface MessagesRange {
   dates: string[];
 }
+
+// ── Simulação ────────────────────────────────────────────────────────────────
+
+export type SimulationStatus = 'open' | 'closed';
+export type SimulationItemType = 'new_purchase' | 'recurring' | 'income_adjustment' | 'exclusion';
+export type SimulationClassification = 'viavel' | 'apertado' | 'inviavel';
+
+export interface Simulation {
+  id: string;
+  tenant_id: string;
+  name: string;
+  status: SimulationStatus;
+  horizon_months: number;
+  llm_message: string | null;
+  llm_model: string | null;
+  llm_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SimulationItem {
+  id: string;
+  simulation_id: string;
+  tenant_id: string;
+  item_type: SimulationItemType;
+  label: string;
+  category_pt: string | null;
+  total_amount: number | null;
+  installments: number | null;
+  monthly_amount: number | null;
+  is_exclusion: boolean;
+  excluded_transaction_ids: string[] | null;
+  direction: 'income' | 'expense' | null;
+}
+
+export interface SimulationMonth {
+  simulation_id: string;
+  tenant_id: string;
+  month_offset: number;
+  year: number;
+  month: number;
+  total_income: number;
+  total_expenses: number;
+  balance: number;
+}
+
+export interface SimulationWithDetails extends Simulation {
+  items: SimulationItem[];
+  months: SimulationMonth[];
+}
+
+export interface SimulationItemPayload {
+  item_type: SimulationItemType;
+  label: string;
+  category_pt?: string | null;
+  total_amount?: number | null;
+  installments?: number | null;
+  monthly_amount?: number | null;
+  is_exclusion?: boolean;
+  excluded_transaction_ids?: string[] | null;
+  direction?: 'income' | 'expense' | null;
+}
+
+export interface SimulationCalculatePayload {
+  horizon_months: number;
+  items: SimulationItemPayload[];
+  exclusions?: string[];
+}
+
+export interface SimulationCreatePayload extends SimulationCalculatePayload {
+  name: string;
+}
+
+export interface SimulationCalculateResult {
+  months: SimulationMonth[];
+}

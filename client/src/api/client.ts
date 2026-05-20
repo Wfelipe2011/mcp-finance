@@ -26,6 +26,11 @@ import type {
   CategoryLabel,
   CartaoResumo,
   ParcelaTimeline,
+  Simulation,
+  SimulationWithDetails,
+  SimulationCalculatePayload,
+  SimulationCalculateResult,
+  SimulationCreatePayload,
 } from "./types.ts";
 
 const BASE = "";
@@ -49,6 +54,48 @@ async function get<T>(url: string): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(BASE + url, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((b as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function patch<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(BASE + url, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((b as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function put<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(BASE + url, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((b as { error?: string }).error ?? res.statusText);
   }
   return res.json() as Promise<T>;
 }
@@ -648,4 +695,34 @@ export function fetchCompromissosCartoes(): Promise<CartaoResumo[]> {
 
 export function fetchParcelasTimeline(): Promise<ParcelaTimeline[]> {
   return get<ParcelaTimeline[]>("/api/compromissos/timeline");
+}
+
+// ── Simulação ────────────────────────────────────────────────────────────────
+
+export function calculateSimulation(payload: SimulationCalculatePayload): Promise<SimulationCalculateResult> {
+  return post<SimulationCalculateResult>("/api/simulacoes/calculate", payload);
+}
+
+export function createSimulation(payload: SimulationCreatePayload): Promise<SimulationWithDetails> {
+  return post<SimulationWithDetails>("/api/simulacoes", payload);
+}
+
+export function updateSimulation(id: string, payload: SimulationCreatePayload): Promise<SimulationWithDetails> {
+  return put<SimulationWithDetails>(`/api/simulacoes/${id}`, payload);
+}
+
+export function getSimulations(): Promise<Simulation[]> {
+  return get<Simulation[]>("/api/simulacoes");
+}
+
+export function getSimulationById(id: string): Promise<SimulationWithDetails> {
+  return get<SimulationWithDetails>(`/api/simulacoes/${id}`);
+}
+
+export function closeSimulation(id: string): Promise<Simulation> {
+  return patch<Simulation>(`/api/simulacoes/${id}`, { status: "closed" });
+}
+
+export function reopenSimulation(id: string): Promise<Simulation> {
+  return patch<Simulation>(`/api/simulacoes/${id}`, { status: "open" });
 }

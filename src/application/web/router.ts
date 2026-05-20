@@ -30,6 +30,7 @@ import { handleExportTransactions, handleExportSummary } from "./routes/export.t
 import { handleListRegras, handleCreateRegra, handleUpdateRegra, handleDeleteRegra, handleReordenarRegra, handleAplicarHistorico } from "./routes/regras.ts";
 import { handleListCategorias } from "./routes/categorias.ts";
 import { handlePatchCategoria, handleCountByDescriptionLike } from "./routes/transacoes.ts";
+import { handleCalculateSimulation, handleCreateSimulation, handleGetSimulations, handleGetSimulationById, handlePatchSimulation, handleUpdateSimulation } from "./routes/simulacoes.ts";
 
 export async function router(
   req: Request,
@@ -111,6 +112,14 @@ export async function router(
   if (path === "/api/categorias" && req.method === "GET") return handleListCategorias(req, tenantId, sql);
   if (path === "/api/transacoes/count" && req.method === "GET") return handleCountByDescriptionLike(req, url, tenantId, sql);
   if (path.startsWith("/api/transacoes/") && path.endsWith("/categoria") && req.method === "PATCH") return handlePatchCategoria(req, url, tenantId, sql);
+
+  // simulações
+  if (path === "/api/simulacoes/calculate" && req.method === "POST") return handleCalculateSimulation(req, url, tenantId, sql);
+  if (path === "/api/simulacoes" && req.method === "POST") return handleCreateSimulation(req, url, tenantId, sql);
+  if (path === "/api/simulacoes" && req.method === "GET") return handleGetSimulations(req, url, tenantId, sql);
+  if (path.startsWith("/api/simulacoes/") && req.method === "GET") return handleGetSimulationById(req, url, tenantId, sql);
+  if (path.startsWith("/api/simulacoes/") && req.method === "PUT") return handleUpdateSimulation(req, url, tenantId, sql);
+  if (path.startsWith("/api/simulacoes/") && req.method === "PATCH") return handlePatchSimulation(req, url, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }
