@@ -3,6 +3,7 @@ import { MonthPicker } from "./components/MonthPicker.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { ConfigDialog } from "./components/ConfigDialog.tsx";
 import { Resumo } from "./tabs/Resumo.tsx";
+import { Plano } from "./tabs/Plano.tsx";
 import { Gastos } from "./tabs/Gastos.tsx";
 import { ProximoMes } from "./tabs/ProximoMes.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
@@ -47,10 +48,16 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "simulacao" | "admin";
+type MainScreenId = "hoje" | "plano";
+type DetailScreenId = "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "credito" | "simulacao" | "admin";
+type ScreenId = MainScreenId | DetailScreenId;
 
-const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
-  { id: "resumo", label: "Resumo", icon: "🏠" },
+const MAIN_NAV_ITEMS: { id: MainScreenId; label: string; icon: string }[] = [
+  { id: "hoje", label: "Hoje", icon: "🏠" },
+  { id: "plano", label: "Plano", icon: "🗺️" },
+];
+
+const DETAIL_SCREENS: { id: DetailScreenId; label: string; icon: string }[] = [
   { id: "gastos", label: "Gastos", icon: "🧾" },
   { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
   { id: "investimentos", label: "Investimentos", icon: "📈" },
@@ -60,7 +67,7 @@ const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "ia", label: "Insights", icon: "✨" },
 ];
 
-const ADMIN_NAV_ITEM: { id: TabId; label: string; icon: string } = { id: "admin", label: "Admin", icon: "🛡️" };
+const ADMIN_DETAIL: { id: DetailScreenId; label: string; icon: string } = { id: "admin", label: "Admin", icon: "🛡️" };
 
 export function App() {
   const [authToken, setAuthToken] = useState<string | null>(
@@ -71,7 +78,7 @@ export function App() {
   );
   const [digest, setDigest] = useState<Digest | null>(null);
   const [meses, setMeses] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("resumo");
+  const [activeScreen, setActiveScreen] = useState<ScreenId>("hoje");
   const [colorMode, setColorMode] = useState<AppColorMode>(
     (localStorage.getItem("colorMode") as AppColorMode) ?? "light"
   );
@@ -83,13 +90,13 @@ export function App() {
   void meses;
 
   const userRole: UserRole = authToken ? (decodeJwtPayload(authToken)?.role ?? "member") : "member";
-  const NAV_ITEMS = userRole === "admin"
-    ? [...BASE_NAV_ITEMS.slice(0, 4), ADMIN_NAV_ITEM, ...BASE_NAV_ITEMS.slice(4)]
-    : BASE_NAV_ITEMS;
+  const drawerDetailItems = userRole === "admin"
+    ? [...DETAIL_SCREENS, ADMIN_DETAIL]
+    : DETAIL_SCREENS;
 
   useEffect(() => {
-    if (activeTab === "admin" && userRole !== "admin") setActiveTab("resumo");
-  }, [activeTab, userRole]);
+    if (activeScreen === "admin" && userRole !== "admin") setActiveScreen("hoje");
+  }, [activeScreen, userRole]);
 
   const handleMonthChange = (month: string) => {
     localStorage.setItem("selectedMonth", month);
@@ -159,10 +166,12 @@ export function App() {
     );
   }
 
-  function renderTab() {
-    switch (activeTab) {
-      case "resumo":
-        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateToInsights={() => setActiveTab("ia")} /> : null;
+  function renderScreen() {
+    switch (activeScreen) {
+      case "hoje":
+        return selectedMonth ? <Resumo month={selectedMonth} digest={digest} onNavigateToInsights={() => setActiveScreen("ia")} /> : null;
+      case "plano":
+        return <Plano onNavigateTo={(id) => setActiveScreen(id as ScreenId)} />;
       case "gastos":
         return selectedMonth ? <Gastos month={selectedMonth} /> : null;
       case "proximo-mes":
@@ -320,17 +329,17 @@ export function App() {
           }}
           className="lg:pb-4"
         >
-          {renderTab()}
+          {renderScreen()}
         </main>
 
         {/* Dock (mobile only) */}
         <div className="dock app-dock lg:hidden">
-          {NAV_ITEMS.map((item) => (
+          {MAIN_NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveTab(item.id)}
-              className={activeTab === item.id ? "dock-active" : ""}
+              onClick={() => setActiveScreen(item.id)}
+              className={activeScreen === item.id ? "dock-active" : ""}
             >
               <span aria-hidden style={{ fontSize: 20 }}>{item.icon}</span>
               <span className="dock-label">{item.label}</span>
@@ -364,11 +373,11 @@ export function App() {
           >
             💰 Finanças
           </p>
-          {NAV_ITEMS.map((item) => (
+          {MAIN_NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => setActiveScreen(item.id)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -376,9 +385,9 @@ export function App() {
                 padding: "var(--space-xs) var(--space-sm)",
                 borderRadius: "var(--radius-lg)",
                 border: "none",
-                background: activeTab === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
-                color: activeTab === item.id ? "var(--color-primary)" : "var(--color-text-body)",
-                fontWeight: activeTab === item.id ? 700 : 400,
+                background: activeScreen === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
+                color: activeScreen === item.id ? "var(--color-primary)" : "var(--color-text-body)",
+                fontWeight: activeScreen === item.id ? 700 : 400,
                 cursor: "pointer",
                 fontSize: "0.9rem",
                 textAlign: "left",
@@ -386,6 +395,50 @@ export function App() {
               }}
             >
               <span aria-hidden style={{ fontSize: 18 }}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+          <div
+            style={{
+              borderTop: "1px solid var(--color-border-hairline)",
+              margin: "var(--space-sm) 0 var(--space-xs)",
+            }}
+          />
+          <p
+            style={{
+              fontSize: "0.7rem",
+              textTransform: "uppercase",
+              letterSpacing: 0.9,
+              fontWeight: 600,
+              color: "var(--color-muted-strong)",
+              margin: "0 0 var(--space-xs)",
+              paddingLeft: "var(--space-sm)",
+            }}
+          >
+            Detalhes
+          </p>
+          {drawerDetailItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveScreen(item.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-sm)",
+                padding: "var(--space-xs) var(--space-sm)",
+                borderRadius: "var(--radius-lg)",
+                border: "none",
+                background: activeScreen === item.id ? "color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card))" : "transparent",
+                color: activeScreen === item.id ? "var(--color-primary)" : "var(--color-text-body)",
+                fontWeight: activeScreen === item.id ? 700 : 400,
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <span aria-hidden style={{ fontSize: 16 }}>{item.icon}</span>
               {item.label}
             </button>
           ))}
