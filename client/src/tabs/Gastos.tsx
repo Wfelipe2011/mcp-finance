@@ -9,6 +9,7 @@ import { NovosGastos } from "../components/NovosGastos.tsx";
 import { TendenciasGrupos } from "../components/TendenciasGrupos.tsx";
 import { TendenciasRecorrentes } from "../components/TendenciasRecorrentes.tsx";
 import { BudgetCard } from "../components/BudgetCard.tsx";
+import { ExportModal } from "../components/ExportModal.tsx";
 import { formatBRL } from "../utils/format.ts";
 
 const cardStyle = {
@@ -33,6 +34,7 @@ export function Gastos({ month }: { month: string }) {
   const [budgets, setBudgets] = useState<BudgetExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const loadBudgets = useCallback(() => {
     fetchBudgets().then(setBudgets).catch(() => setBudgets([]));
@@ -58,11 +60,37 @@ export function Gastos({ month }: { month: string }) {
   if (!data) return <ErrorCard message="Dados não disponíveis." />;
 
   const totalGasto = data.grupos.reduce((sum, g) => sum + g.total_gastos, 0);
+  const grupos = data.grupos.map((g) => g.group_pt);
+
+  // Calcular dateFrom/dateTo do mês selecionado
+  const [monthYear, monthNum] = month.split("-");
+  const y = parseInt(monthYear ?? "", 10);
+  const m = parseInt(monthNum ?? "", 10);
+  const lastDay = isNaN(y) || isNaN(m) ? 28 : new Date(y, m, 0).getDate();
+  const dateFrom = isNaN(y) || isNaN(m) ? "" : `${y}-${String(m).padStart(2, "0")}-01`;
+  const dateTo = isNaN(y) || isNaN(m) ? "" : `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
   return (
     <div className="mt-4 space-y-4">
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        initialDateFrom={dateFrom}
+        initialDateTo={dateTo}
+        grupos={grupos}
+      />
       <div style={cardStyle}>
-        <p style={captionStyle}>Total Gasto</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <p style={captionStyle}>Total Gasto</p>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            onClick={() => setExportOpen(true)}
+            style={{ marginTop: "-0.25rem" }}
+          >
+            Exportar
+          </button>
+        </div>
         <p
           data-testid="gastos-total"
           data-tone="negative"

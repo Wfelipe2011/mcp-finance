@@ -329,3 +329,77 @@ export async function deleteBudget(id: number): Promise<void> {
     throw new Error((body as { error?: string }).error ?? res.statusText);
   }
 }
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+
+export function buildExportUrl(
+  type: "transactions" | "summary",
+  params: Record<string, string>,
+): string {
+  const base = `/api/export/${type}`;
+  const query = new URLSearchParams(params).toString();
+  return query ? `${base}?${query}` : base;
+}
+
+export function triggerDownload(url: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/** Faz fetch do CSV, trata 422 e dispara download via blob. Retorna mensagem de erro ou null se OK. */
+export async function fetchCsvExport(
+  url: string,
+  filename: string,
+): Promise<string | null> {
+  const res = await fetch(BASE + url, { headers: authHeaders() });
+  if (res.status === 401) return handleUnauthorized();
+  if (res.status === 422) {
+    const body = await res.json().catch(() => ({ error: "Muitos registros." }));
+    return (
+      (body as { error?: string }).error ??
+      "Muitos registros. Reduza o período ou adicione filtro de categoria."
+    );
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
+  return null;
+}
+
+export async function openHtmlExport(url: string): Promise<string | null> {
+  const target = window.open("", "_blank");
+  if (!target) {
+    return "Não foi possível abrir a nova aba. Verifique o bloqueador de pop-ups do navegador.";
+  }
+  target.opener = null;
+
+  const res = await fetch(BASE + url, { headers: authHeaders() });
+  if (res.status === 401) {
+    target.close();
+    return handleUnauthorized();
+  }
+  if (!res.ok) {
+    target.close();
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+
+  const html = await res.text();
+  const blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  target.location.href = blobUrl;
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  return null;
+}

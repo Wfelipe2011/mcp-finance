@@ -26,6 +26,7 @@ import { handleForecastMessage } from "./routes/forecast/message.ts";
 import { handleChat } from "./routes/chat.ts";
 import { handleForecastDaily, handleForecastDailyRegenerate } from "./routes/forecast/daily.ts";
 import { handleDailyCategoryExclusionPathPost, handleDailyCategoryExclusionsGet, handleDailyCategoryExclusionsPost, handleDailyExclusionsPost, handleDailyMessagesRange } from "./routes/forecast/daily-handlers.ts";
+import { handleExportTransactions, handleExportSummary } from "./routes/export.ts";
 
 export async function router(req: Request, url: URL, tenantId: string, sql: SQL): Promise<Response> {
   const path = url.pathname;
@@ -84,6 +85,9 @@ export async function router(req: Request, url: URL, tenantId: string, sql: SQL)
   if (path === "/api/forecast/daily/category-exclusions" && req.method === "POST") return handleDailyCategoryExclusionsPost(req, tenantId, sql);
   if (path === "/api/forecast/daily/daily-exclusions" && req.method === "POST") return handleDailyExclusionsPost(req, tenantId, sql);
   if (path === "/api/forecast/daily/messages-range" && req.method === "GET") return handleDailyMessagesRange(req, tenantId, sql);
+
+  if (path === "/api/export/transactions" && req.method === "GET") return handleExportTransactions(req, url, tenantId, sql);
+  if (path === "/api/export/summary" && req.method === "GET") return handleExportSummary(req, url, tenantId, sql);
 
   return errorResponse("Not found", 404);
 }

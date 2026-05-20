@@ -2231,6 +2231,99 @@ export class BunPgAdapter {
     return rows.map((r) => r.id);
   }
 
+  async getExportTransactions(params: {
+    dateFrom: string;
+    dateTo: string;
+    categoryGroup?: string;
+    limit: number;
+  }): Promise<{ data: string; descricao: string; categoria: string | null; grupo: string | null; membro: string | null; valor: number; tipo: string }[]> {
+    return this.withTenant(async (q) => {
+      type Row = { data: string; descricao: string; categoria: string | null; grupo: string | null; membro: string | null; valor: string; tipo: string };
+      let rows: Row[];
+      if (params.categoryGroup) {
+        rows = await q<Row[]>`
+          SELECT
+            (te.date::TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::DATE::TEXT AS data,
+            te.description AS descricao,
+            te.category_pt AS categoria,
+            te.category_group_pt AS grupo,
+            tm.display_name AS membro,
+            (CASE te.transaction_kind
+              WHEN 'EXPENSE' THEN -ABS(te.amount)
+              WHEN 'INCOME'  THEN  ABS(te.amount)
+              WHEN 'INVEST'  THEN -ABS(te.amount)
+              ELSE te.amount
+            END)::text AS valor,
+            te.transaction_kind AS tipo
+          FROM transactions_enriched te
+          LEFT JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
+          WHERE (te.date::TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::DATE
+                BETWEEN ${params.dateFrom}::date AND ${params.dateTo}::date
+            AND te.category_group_pt = ${params.categoryGroup}
+          ORDER BY te.date DESC
+          LIMIT ${params.limit}
+        `;
+      } else {
+        rows = await q<Row[]>`
+          SELECT
+            (te.date::TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::DATE::TEXT AS data,
+            te.description AS descricao,
+            te.category_pt AS categoria,
+            te.category_group_pt AS grupo,
+            tm.display_name AS membro,
+            (CASE te.transaction_kind
+              WHEN 'EXPENSE' THEN -ABS(te.amount)
+              WHEN 'INCOME'  THEN  ABS(te.amount)
+              WHEN 'INVEST'  THEN -ABS(te.amount)
+              ELSE te.amount
+            END)::text AS valor,
+            te.transaction_kind AS tipo
+          FROM transactions_enriched te
+          LEFT JOIN tenant_members tm ON tm.name = te.owner_normalized AND tm.tenant_id = te.tenant_id
+          WHERE (te.date::TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::DATE
+                BETWEEN ${params.dateFrom}::date AND ${params.dateTo}::date
+          ORDER BY te.date DESC
+          LIMIT ${params.limit}
+        `;
+      }
+      return rows.map((r) => ({ ...r, valor: Number(r.valor) }));
+    });
+  }
+
+  async getExportSummary(params: {
+    year: number;
+    month?: number;
+  }): Promise<{ ano: number; mes: number; grupo: string; total_gasto: number }[]> {
+    return this.withTenant(async (q) => {
+      type Row = { ano: number; mes: number; grupo: string; total_gasto: string };
+      let rows: Row[];
+      if (params.month) {
+        rows = await q<Row[]>`
+          SELECT
+            year AS ano,
+            month AS mes,
+            group_pt AS grupo,
+            total_gastos AS total_gasto
+          FROM cube_gastos_mensais
+          WHERE year = ${params.year} AND month = ${params.month}
+          ORDER BY month, group_pt
+        `;
+      } else {
+        rows = await q<Row[]>`
+          SELECT
+            year AS ano,
+            month AS mes,
+            group_pt AS grupo,
+            total_gastos AS total_gasto
+          FROM cube_gastos_mensais
+          WHERE year = ${params.year}
+          ORDER BY month, group_pt
+        `;
+      }
+      return rows.map((r) => ({ ...r, total_gasto: Number(r.total_gasto) }));
+    });
+  }
+
   async close(): Promise<void> {
     if (this.ownsSql) {
       await this.sql.close();
