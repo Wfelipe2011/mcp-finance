@@ -12,6 +12,7 @@ import { Metas } from "./tabs/Metas.tsx";
 import AdminScreen from "./tabs/AdminScreen.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
 import type { Digest, JwtPayload, UserRole } from "./api/types.ts";
+import { applyAppTheme, readStoredColorMode } from "./theme.ts";
 import type { AppColorMode } from "./theme.ts";
 
 const Credito = lazy(() =>
@@ -80,7 +81,7 @@ export function App() {
   const [meses, setMeses] = useState<string[]>([]);
   const [activeScreen, setActiveScreen] = useState<ScreenId>("hoje");
   const [colorMode, setColorMode] = useState<AppColorMode>(
-    (localStorage.getItem("colorMode") as AppColorMode) ?? "light"
+    readStoredColorMode()
   );
   const [syncState, setSyncState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
@@ -110,8 +111,7 @@ export function App() {
   };
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("light", colorMode === "light");
+    applyAppTheme(colorMode);
   }, [colorMode]);
 
   useEffect(() => {

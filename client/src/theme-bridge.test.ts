@@ -1,84 +1,142 @@
 import { describe, expect, it } from "bun:test";
-import { createAppTheme } from "./theme";
+import { applyAppTheme, createAppTheme, normalizeColorMode } from "./theme";
 
-describe("ponte MUI para tokens CSS", () => {
-  it("mapeia primary/error/success para tokens", () => {
+describe("contrato de tema DaisyUI", () => {
+  it("modo escuro usa tema DaisyUI nomeado", () => {
     const theme = createAppTheme("dark");
 
-    expect(theme.palette.primary.main).toBe("var(--color-primary)");
-    expect(theme.palette.error.main).toBe("var(--color-trading-down)");
-    expect(theme.palette.success.main).toBe("var(--color-trading-up)");
+    expect(theme.dataTheme).toBe("finance-dark");
+    expect(theme.colorScheme).toBe("dark");
+    expect(theme.rootClass).toBe("dark");
   });
 
-  it("mantém modo light sem quebrar e preserva mode", () => {
+  it("modo claro usa tema DaisyUI nomeado", () => {
     const theme = createAppTheme("light");
 
-    expect(theme.palette.mode).toBe("light");
-    expect(theme.palette.background.default).toBe("var(--color-canvas-light)");
-    expect(theme.palette.background.paper).toBe("var(--color-surface-soft-light)");
+    expect(theme.dataTheme).toBe("finance-light");
+    expect(theme.colorScheme).toBe("light");
+    expect(theme.rootClass).toBe("light");
   });
 
-  it("mapeia tokens de texto", () => {
-    const darkTheme = createAppTheme("dark");
-    const lightTheme = createAppTheme("light");
-
-    expect(darkTheme.palette.text.primary).toBe("var(--color-on-dark)");
-    expect(darkTheme.palette.text.secondary).toBe("var(--color-body)");
-    expect(lightTheme.palette.text.primary).toBe("var(--color-body-on-light)");
-    expect(lightTheme.palette.text.secondary).toBe("var(--color-muted)");
+  it("normaliza valores salvos desconhecidos para modo claro", () => {
+    expect(normalizeColorMode("dark")).toBe("dark");
+    expect(normalizeColorMode("light")).toBe("light");
+    expect(normalizeColorMode("alto-contraste")).toBe("light");
+    expect(normalizeColorMode(null)).toBe("light");
   });
 
-  it("define fontFamily com token BinanceNova e fallback system-ui", () => {
+  it("aplica classe, data-theme e color-scheme no elemento raiz", () => {
+    const root = document.createElement("html");
+
+    applyAppTheme("dark", root);
+
+    expect(root.classList.contains("dark")).toBe(true);
+    expect(root.classList.contains("light")).toBe(false);
+    expect(root.dataset.theme).toBe("finance-dark");
+    expect(root.style.colorScheme).toBe("dark");
+
+    applyAppTheme("light", root);
+
+    expect(root.classList.contains("light")).toBe(true);
+    expect(root.classList.contains("dark")).toBe(false);
+    expect(root.dataset.theme).toBe("finance-light");
+    expect(root.style.colorScheme).toBe("light");
+  });
+
+  it("tokens de primary e trading são os mesmos em ambos os modos", () => {
+    const dark = createAppTheme("dark");
+    const light = createAppTheme("light");
+
+    expect(dark.tokens.primary).toBe("var(--color-primary)");
+    expect(light.tokens.primary).toBe("var(--color-primary)");
+    expect(dark.tokens.tradingUp).toBe("var(--color-trading-up)");
+    expect(dark.tokens.tradingDown).toBe("var(--color-trading-down)");
+    expect(light.tokens.tradingUp).toBe("var(--color-trading-up)");
+    expect(light.tokens.tradingDown).toBe("var(--color-trading-down)");
+  });
+
+  it("canvas e textPrimary diferem entre modos", () => {
+    const dark = createAppTheme("dark");
+    const light = createAppTheme("light");
+
+    expect(dark.tokens.canvas).not.toBe(light.tokens.canvas);
+    expect(dark.tokens.textPrimary).not.toBe(light.tokens.textPrimary);
+  });
+
+  it("modo escuro usa variáveis de canvas e texto escuros", () => {
     const theme = createAppTheme("dark");
 
-    expect(theme.typography.fontFamily).toContain("BinanceNova");
-    expect(theme.typography.fontFamily).toContain("system-ui");
+    expect(theme.tokens.canvas).toBe("var(--color-canvas-dark)");
+    expect(theme.tokens.surfaceCard).toBe("var(--color-surface-card-dark)");
+    expect(theme.tokens.textPrimary).toBe("var(--color-on-dark)");
+    expect(theme.tokens.textBody).toBe("var(--color-body)");
+    expect(theme.tokens.borderHairline).toBe("var(--color-hairline-on-dark)");
   });
 
-  it("aplica shape e overrides chave de Button/Card/Paper", () => {
-    const theme = createAppTheme("dark");
+  it("modo claro usa variáveis de canvas e texto claros", () => {
+    const theme = createAppTheme("light");
 
-    expect(theme.shape.borderRadius).toBe(6);
-    expect(theme.components?.MuiButton?.styleOverrides?.root).toMatchObject({
-      borderRadius: "var(--radius-md)",
-    });
-    expect(theme.components?.MuiCard?.styleOverrides?.root).toMatchObject({
-      borderRadius: "var(--radius-lg)",
-    });
-    expect(theme.components?.MuiPaper?.styleOverrides?.root).toMatchObject({
-      borderRadius: "var(--radius-lg)",
-    });
+    expect(theme.tokens.canvas).toBe("var(--color-canvas-light)");
+    expect(theme.tokens.surfaceCard).toBe("var(--color-surface-soft-light)");
+    expect(theme.tokens.textPrimary).toBe("var(--color-body-on-light)");
+    expect(theme.tokens.textBody).toBe("var(--color-body-on-light)");
+    expect(theme.tokens.borderHairline).toBe("var(--color-hairline-on-light)");
   });
 });
 
-describe("snapshot de tema tokenizado", () => {
-  it("mantém snapshot dos tokens aplicados no modo dark", () => {
+describe("snapshot de tokens por modo", () => {
+  it("snapshot do modo escuro", () => {
     const theme = createAppTheme("dark");
 
     expect({
-      mode: theme.palette.mode,
-      primary: theme.palette.primary.main,
-      error: theme.palette.error.main,
-      success: theme.palette.success.main,
-      backgroundDefault: theme.palette.background.default,
-      backgroundPaper: theme.palette.background.paper,
-      textPrimary: theme.palette.text.primary,
-      textSecondary: theme.palette.text.secondary,
-      fontFamilyIncludesBinanceNova: (theme.typography.fontFamily ?? "").includes("BinanceNova"),
-      buttonRadius: (theme.components?.MuiButton?.styleOverrides?.root as { borderRadius?: string })
-        .borderRadius,
+      dataTheme: theme.dataTheme,
+      colorScheme: theme.colorScheme,
+      canvas: theme.tokens.canvas,
+      surfaceCard: theme.tokens.surfaceCard,
+      textPrimary: theme.tokens.textPrimary,
+      textBody: theme.tokens.textBody,
+      borderHairline: theme.tokens.borderHairline,
+      primary: theme.tokens.primary,
+      tradingUp: theme.tokens.tradingUp,
+      tradingDown: theme.tokens.tradingDown,
     }).toMatchInlineSnapshot(`
       {
-        "backgroundDefault": "var(--color-canvas-dark)",
-        "backgroundPaper": "var(--color-surface-card-dark)",
-        "buttonRadius": "var(--radius-md)",
-        "error": "var(--color-trading-down)",
-        "fontFamilyIncludesBinanceNova": true,
-        "mode": "dark",
+        "borderHairline": "var(--color-hairline-on-dark)",
+        "canvas": "var(--color-canvas-dark)",
+        "colorScheme": "dark",
+        "dataTheme": "finance-dark",
         "primary": "var(--color-primary)",
-        "success": "var(--color-trading-up)",
+        "surfaceCard": "var(--color-surface-card-dark)",
+        "textBody": "var(--color-body)",
         "textPrimary": "var(--color-on-dark)",
-        "textSecondary": "var(--color-body)",
+        "tradingDown": "var(--color-trading-down)",
+        "tradingUp": "var(--color-trading-up)",
+      }
+    `);
+  });
+
+  it("snapshot do modo claro", () => {
+    const theme = createAppTheme("light");
+
+    expect({
+      dataTheme: theme.dataTheme,
+      colorScheme: theme.colorScheme,
+      canvas: theme.tokens.canvas,
+      surfaceCard: theme.tokens.surfaceCard,
+      textPrimary: theme.tokens.textPrimary,
+      textBody: theme.tokens.textBody,
+      borderHairline: theme.tokens.borderHairline,
+      primary: theme.tokens.primary,
+    }).toMatchInlineSnapshot(`
+      {
+        "borderHairline": "var(--color-hairline-on-light)",
+        "canvas": "var(--color-canvas-light)",
+        "colorScheme": "light",
+        "dataTheme": "finance-light",
+        "primary": "var(--color-primary)",
+        "surfaceCard": "var(--color-surface-soft-light)",
+        "textBody": "var(--color-body-on-light)",
+        "textPrimary": "var(--color-body-on-light)",
       }
     `);
   });

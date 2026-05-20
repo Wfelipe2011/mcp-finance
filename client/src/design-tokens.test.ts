@@ -95,3 +95,71 @@ describe("mapeamento de tokens no tailwind", () => {
     expect(extend.borderRadius?.md).toBe("var(--radius-md)");
   });
 });
+
+describe("configuração DaisyUI", () => {
+  const daisyui = (tailwindConfig as Record<string, unknown>).daisyui as {
+    themes?: unknown;
+    logs?: boolean;
+  };
+
+  const themes = daisyui.themes as Array<Record<string, Record<string, string>>>;
+  const financeLight = themes.find((theme) => "finance-light" in theme)?.["finance-light"];
+  const financeDark = themes.find((theme) => "finance-dark" in theme)?.["finance-dark"];
+
+  it("inclui o tema claro nomeado do produto", () => {
+    expect(financeLight).toBeDefined();
+    expect(financeLight?.["color-scheme"]).toBe("light");
+  });
+
+  it("inclui o tema escuro nomeado do produto", () => {
+    expect(financeDark).toBeDefined();
+    expect(financeDark?.["color-scheme"]).toBe("dark");
+  });
+
+  it("tem exatamente dois temas configurados", () => {
+    expect(themes).toHaveLength(2);
+  });
+
+  it("mapeia os temas DaisyUI para a paleta do app", () => {
+    expect(financeLight?.primary).toBe("#fcd535");
+    expect(financeDark?.primary).toBe("#fcd535");
+    expect(financeLight?.["base-100"]).toBe("#ffffff");
+    expect(financeDark?.["base-100"]).toBe("#0b0e11");
+    expect(financeLight?.["base-content"]).toBe("#181a20");
+    expect(financeDark?.["base-content"]).toBe("#eaecef");
+  });
+});
+
+describe("tokens semânticos modo escuro (:root)", () => {
+  it("canvas semântico aponta para canvas-dark em :root", () => {
+    const rootBlock = extractBlock(":root");
+    expect(rootBlock).toContain("--color-canvas: var(--color-canvas-dark);");
+  });
+
+  it("text-primary aponta para on-dark em :root", () => {
+    const rootBlock = extractBlock(":root");
+    expect(rootBlock).toContain("--color-text-primary: var(--color-on-dark);");
+  });
+
+  it("border-hairline aponta para hairline-on-dark em :root", () => {
+    const rootBlock = extractBlock(":root");
+    expect(rootBlock).toContain("--color-border-hairline: var(--color-hairline-on-dark);");
+  });
+});
+
+describe("tokens semânticos modo claro (.light)", () => {
+  it("canvas semântico aponta para branco em .light", () => {
+    const lightBlock = extractBlock(".light");
+    expect(lightBlock).toContain("--color-canvas: #ffffff;");
+  });
+
+  it("text-primary aponta para cor escura em .light", () => {
+    const lightBlock = extractBlock(".light");
+    expect(lightBlock).toContain("--color-text-primary: #181a20;");
+  });
+
+  it("border-hairline aponta para hairline-on-light em .light", () => {
+    const lightBlock = extractBlock(".light");
+    expect(lightBlock).toContain("--color-border-hairline: #eaecef;");
+  });
+});

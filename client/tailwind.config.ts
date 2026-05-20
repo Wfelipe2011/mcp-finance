@@ -1,6 +1,50 @@
 import type { Config } from "tailwindcss";
 import daisyui from "daisyui";
 
+const financeLightTheme = {
+  "finance-light": {
+    "color-scheme": "light",
+    primary: "#fcd535",
+    "primary-content": "#181a20",
+    secondary: "#2dbdb6",
+    "secondary-content": "#ffffff",
+    accent: "#2dbdb6",
+    "accent-content": "#181a20",
+    neutral: "#181a20",
+    "neutral-content": "#ffffff",
+    "base-100": "#ffffff",
+    "base-200": "#fafafa",
+    "base-300": "#f5f5f5",
+    "base-content": "#181a20",
+    info: "#3b82f6",
+    success: "#0ecb81",
+    warning: "#f0b90b",
+    error: "#f6465d",
+  },
+};
+
+const financeDarkTheme = {
+  "finance-dark": {
+    "color-scheme": "dark",
+    primary: "#fcd535",
+    "primary-content": "#181a20",
+    secondary: "#2dbdb6",
+    "secondary-content": "#181a20",
+    accent: "#2dbdb6",
+    "accent-content": "#181a20",
+    neutral: "#eaecef",
+    "neutral-content": "#181a20",
+    "base-100": "#0b0e11",
+    "base-200": "#1e2329",
+    "base-300": "#2b3139",
+    "base-content": "#eaecef",
+    info: "#3b82f6",
+    success: "#0ecb81",
+    warning: "#f0b90b",
+    error: "#f6465d",
+  },
+};
+
 const config: Config = {
   content: [
     "./index.html",
@@ -69,7 +113,7 @@ const config: Config = {
   },
   plugins: [daisyui],
   daisyui: {
-    themes: ["light"],
+    themes: [financeLightTheme, financeDarkTheme],
     logs: false,
   },
 };
