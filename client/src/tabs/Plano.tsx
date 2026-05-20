@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  createGoal,
   fetchBudgets,
   fetchFinancialDiagnosis,
   fetchDigest,
   fetchGoals,
   fetchTransacoes,
   postChatMessage,
+  upsertBudget,
 } from "../api/client.ts";
 import type {
   BudgetExecution,
@@ -42,6 +44,49 @@ const EXECUTION_LINKS: { id: string; label: string; description: string }[] = [
   { id: "metas", label: "Orçamento", description: "Definir limites por categoria" },
   { id: "simulacao", label: "Simulação", description: "Testar decisões futuras" },
 ];
+
+const PLAN_ORIGIN_TAG = "origem:plano";
+
+type ActionConvertType = "goal" | "budget" | null;
+
+function classifyAction(action: DiagnosisAction): ActionConvertType {
+  if (action.destination === "metas") return "goal";
+  if (action.destination === "orcamento") return "budget";
+  return null;
+}
+
+function extractBudgetCategory(action: DiagnosisAction): string {
+  const match = /\bem\s+([A-Za-zÀ-ú][A-Za-zÀ-ú\s]+)$/i.exec(action.title);
+  if (match) return match[1].trim();
+  return action.title;
+}
+
+function findSimilarActiveGoal(action: DiagnosisAction, goals: Goal[]): Goal | null {
+  const words = action.title
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  return (
+    goals.find(
+      (g) =>
+        g.status === "active" &&
+        words.some((w) => g.name.toLowerCase().includes(w))
+    ) ?? null
+  );
+}
+
+function findSimilarActiveBudget(
+  action: DiagnosisAction,
+  budgets: BudgetExecution[]
+): BudgetExecution | null {
+  const cat = extractBudgetCategory(action).toLowerCase();
+  const firstWord = cat.split(/\s+/)[0];
+  return budgets.find((b) => b.is_active && b.category_pt.toLowerCase().includes(firstWord)) ?? null;
+}
+
+function isPlanGoal(goal: Goal): boolean {
+  return goal.notes?.includes(PLAN_ORIGIN_TAG) ?? false;
+}
 
 function resolveDestination(dest: DetailDestination): string {
   if (dest === "orcamento") return "metas";
@@ -88,14 +133,272 @@ const sectionHeadingStyle: React.CSSProperties = {
   marginBottom: "var(--space-sm)",
 };
 
-function ActionCard({
+function GoalConfirmCard({
   action,
+  goals,
   onNavigateTo,
+  onConfirm,
+  onCancel,
 }: {
   action: DiagnosisAction;
+  goals: Goal[];
   onNavigateTo: (id: string) => void;
+  onConfirm: (goal: Goal) => void;
+  onCancel: () => void;
 }) {
+  const similar = findSimilarActiveGoal(action, goals);
+  const [name, setName] = useState(action.title);
+  const [targetAmount, setTargetAmount] = useState(() =>
+    action.estimated_monthly_impact > 0 ? Math.round(action.estimated_monthly_impact * 6) : 1000
+  );
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const panelStyle: React.CSSProperties = {
+    marginTop: "var(--space-sm)",
+    padding: "var(--space-sm)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--color-border-hairline)",
+    backgroundColor: "var(--color-surface-elevated)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-xs)",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    marginTop: 2,
+    padding: "4px 8px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--color-border-hairline)",
+    backgroundColor: "var(--color-surface-card)",
+    color: "var(--color-text-primary)",
+    fontSize: "0.8rem",
+    boxSizing: "border-box",
+  };
+
+  if (similar) {
+    return (
+      <div style={panelStyle}>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--color-text-body)", lineHeight: 1.4 }}>
+          Meta semelhante já existe:{" "}
+          <strong style={{ color: "var(--color-text-primary)" }}>{similar.name}</strong>{" "}
+          ({Math.min(similar.progress_pct, 100).toFixed(0)}% concluída).
+        </p>
+        <div style={{ display: "flex", gap: "var(--space-xs)" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-hairline)", background: "transparent", cursor: "pointer", color: "var(--color-text-body)" }}
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTo("metas")}
+            style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "none", backgroundColor: "var(--color-primary)", color: "var(--color-on-primary)", cursor: "pointer", fontWeight: 600 }}
+          >
+            Ver em Metas →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  async function handleGoalConfirm() {
+    if (!name.trim() || targetAmount <= 0) return;
+    setSaving(true);
+    setApiError(null);
+    try {
+      const goal = await createGoal({
+        name: name.trim(),
+        goal_type: "saving",
+        target_amount: targetAmount,
+        notes: `${PLAN_ORIGIN_TAG} | ${action.title}`,
+      });
+      onConfirm(goal);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Erro ao criar meta");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={panelStyle}>
+      <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+        Criar meta a partir desta recomendação
+      </p>
+      <label style={{ fontSize: "0.75rem", color: "var(--color-text-body)" }}>
+        Nome
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+      </label>
+      <label style={{ fontSize: "0.75rem", color: "var(--color-text-body)" }}>
+        Valor alvo (R$)
+        <input
+          type="number"
+          min={1}
+          step={10}
+          value={targetAmount}
+          onChange={(e) => setTargetAmount(Number(e.target.value))}
+          style={inputStyle}
+        />
+      </label>
+      {apiError && (
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-trading-down)" }}>{apiError}</p>
+      )}
+      <div style={{ display: "flex", gap: "var(--space-xs)" }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-hairline)", background: "transparent", cursor: "pointer", color: "var(--color-text-body)" }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleGoalConfirm()}
+          disabled={saving || !name.trim() || targetAmount <= 0}
+          style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "none", backgroundColor: "var(--color-primary)", color: "var(--color-on-primary)", cursor: "pointer", fontWeight: 600 }}
+        >
+          {saving ? "Criando..." : "Confirmar meta"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BudgetConfirmCard({
+  action,
+  budgets,
+  onConfirm,
+  onCancel,
+}: {
+  action: DiagnosisAction;
+  budgets: BudgetExecution[];
+  onConfirm: (budget: BudgetExecution) => void;
+  onCancel: () => void;
+}) {
+  const similar = findSimilarActiveBudget(action, budgets);
+  const suggestedCategory = extractBudgetCategory(action);
+  const [category, setCategory] = useState(similar?.category_pt ?? suggestedCategory);
+  const [limit, setLimit] = useState(() =>
+    similar?.monthly_limit ??
+    (action.estimated_monthly_impact > 0 ? Math.round(action.estimated_monthly_impact) : 500)
+  );
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const panelStyle: React.CSSProperties = {
+    marginTop: "var(--space-sm)",
+    padding: "var(--space-sm)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--color-border-hairline)",
+    backgroundColor: "var(--color-surface-elevated)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-xs)",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    marginTop: 2,
+    padding: "4px 8px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--color-border-hairline)",
+    backgroundColor: "var(--color-surface-card)",
+    color: "var(--color-text-primary)",
+    fontSize: "0.8rem",
+    boxSizing: "border-box",
+  };
+
+  async function handleBudgetConfirm() {
+    if (!category.trim() || limit <= 0) return;
+    setSaving(true);
+    setApiError(null);
+    try {
+      const budget = await upsertBudget({ category_pt: category.trim(), monthly_limit: limit });
+      onConfirm(budget);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Erro ao salvar orçamento");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={panelStyle}>
+      <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+        {similar ? "Revisar orçamento existente" : "Definir orçamento a partir desta recomendação"}
+      </p>
+      {similar && (
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-body)", lineHeight: 1.4 }}>
+          Orçamento ativo para <strong>{similar.category_pt}</strong>: limite atual{" "}
+          <strong>{formatBRL(similar.monthly_limit)}/mês</strong>. Ajuste abaixo se desejar alterar.
+        </p>
+      )}
+      <label style={{ fontSize: "0.75rem", color: "var(--color-text-body)" }}>
+        Categoria
+        <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle} />
+      </label>
+      <label style={{ fontSize: "0.75rem", color: "var(--color-text-body)" }}>
+        Teto mensal (R$)
+        <input
+          type="number"
+          min={1}
+          step={10}
+          value={limit}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          style={inputStyle}
+        />
+      </label>
+      {apiError && (
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-trading-down)" }}>{apiError}</p>
+      )}
+      <div style={{ display: "flex", gap: "var(--space-xs)" }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-hairline)", background: "transparent", cursor: "pointer", color: "var(--color-text-body)" }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleBudgetConfirm()}
+          disabled={saving || !category.trim() || limit <= 0}
+          style={{ fontSize: "0.8rem", padding: "3px 10px", borderRadius: "var(--radius-md)", border: "none", backgroundColor: "var(--color-primary)", color: "var(--color-on-primary)", cursor: "pointer", fontWeight: 600 }}
+        >
+          {saving ? "Salvando..." : similar ? "Atualizar orçamento" : "Confirmar orçamento"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({
+  action,
+  goals,
+  budgets,
+  onNavigateTo,
+  onGoalCreated,
+  onBudgetCreated,
+}: {
+  action: DiagnosisAction;
+  goals: Goal[];
+  budgets: BudgetExecution[];
+  onNavigateTo: (id: string) => void;
+  onGoalCreated: (goal: Goal) => void;
+  onBudgetCreated: (budget: BudgetExecution) => void;
+}) {
+  const [showConfirm, setShowConfirm] = useState<"goal" | "budget" | null>(null);
   const dest = resolveDestination(action.destination);
+  const convertType = classifyAction(action);
+
   return (
     <div
       style={{
@@ -122,22 +425,83 @@ function ActionCard({
         ) : (
           <span />
         )}
-        <button
-          type="button"
-          onClick={() => onNavigateTo(dest)}
-          style={{
-            fontSize: "0.8rem",
-            padding: "4px var(--space-sm)",
-            borderRadius: "var(--radius-md)",
-            border: "1px solid var(--color-border-hairline)",
-            backgroundColor: "var(--color-surface-elevated)",
-            color: "var(--color-primary)",
-            cursor: "pointer",
-          }}
-        >
-          Ver detalhe →
-        </button>
+        <div style={{ display: "flex", gap: "var(--space-xs)", flexWrap: "wrap" }}>
+          {convertType === "goal" && !showConfirm && (
+            <button
+              type="button"
+              onClick={() => setShowConfirm("goal")}
+              style={{
+                fontSize: "0.8rem",
+                padding: "4px var(--space-sm)",
+                borderRadius: "var(--radius-md)",
+                border: "none",
+                backgroundColor: "var(--color-primary)",
+                color: "var(--color-on-primary)",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Criar meta
+            </button>
+          )}
+          {convertType === "budget" && !showConfirm && (
+            <button
+              type="button"
+              onClick={() => setShowConfirm("budget")}
+              style={{
+                fontSize: "0.8rem",
+                padding: "4px var(--space-sm)",
+                borderRadius: "var(--radius-md)",
+                border: "none",
+                backgroundColor: "var(--color-primary)",
+                color: "var(--color-on-primary)",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Definir orçamento
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onNavigateTo(dest)}
+            style={{
+              fontSize: "0.8rem",
+              padding: "4px var(--space-sm)",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-border-hairline)",
+              backgroundColor: "var(--color-surface-elevated)",
+              color: "var(--color-primary)",
+              cursor: "pointer",
+            }}
+          >
+            Ver detalhe →
+          </button>
+        </div>
       </div>
+      {showConfirm === "goal" && (
+        <GoalConfirmCard
+          action={action}
+          goals={goals}
+          onNavigateTo={onNavigateTo}
+          onConfirm={(goal) => {
+            onGoalCreated(goal);
+            setShowConfirm(null);
+          }}
+          onCancel={() => setShowConfirm(null)}
+        />
+      )}
+      {showConfirm === "budget" && (
+        <BudgetConfirmCard
+          action={action}
+          budgets={budgets}
+          onConfirm={(budget) => {
+            onBudgetCreated(budget);
+            setShowConfirm(null);
+          }}
+          onCancel={() => setShowConfirm(null)}
+        />
+      )}
     </div>
   );
 }
@@ -238,7 +602,12 @@ function ExecutionLinks({ onNavigateTo }: { onNavigateTo: (id: string) => void }
 }
 
 function ProgressSection({ goals, budgets, onNavigateTo }: { goals: Goal[]; budgets: BudgetExecution[]; onNavigateTo: (id: string) => void }) {
-  const activeGoals = goals.filter((goal) => goal.status === "active").slice(0, 2);
+  const sortedActiveGoals = [...goals.filter((g) => g.status === "active")].sort((a, b) => {
+    const ap = isPlanGoal(a) ? 0 : 1;
+    const bp = isPlanGoal(b) ? 0 : 1;
+    return ap - bp;
+  });
+  const activeGoals = sortedActiveGoals.slice(0, 2);
   const visibleBudgets = budgets.filter((budget) => budget.is_active).slice(0, 2);
   const hasProgress = activeGoals.length > 0 || visibleBudgets.length > 0;
 
@@ -288,7 +657,14 @@ function ProgressSection({ goals, budgets, onNavigateTo }: { goals: Goal[]; budg
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "var(--space-sm)" }}>
         {activeGoals.map((goal) => (
           <div key={`goal-${goal.id}`} style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-hairline)", backgroundColor: "var(--color-surface-card)", padding: "var(--space-md)" }}>
-            <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-muted-strong)", fontWeight: 700 }}>Meta</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-xs)" }}>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-muted-strong)", fontWeight: 700 }}>Meta</p>
+              {isPlanGoal(goal) && (
+                <span style={{ fontSize: "0.65rem", color: "var(--color-primary)", fontWeight: 700, backgroundColor: "color-mix(in srgb, var(--color-primary) 12%, transparent)", padding: "1px 6px", borderRadius: "var(--radius-pill)", border: "1px solid color-mix(in srgb, var(--color-primary) 25%, transparent)" }}>
+                  plano
+                </span>
+              )}
+            </div>
             <p style={{ margin: "2px 0", fontSize: "0.875rem", color: "var(--color-text-primary)", fontWeight: 600 }}>{goal.name}</p>
             <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-body)" }}>{Math.min(goal.progress_pct, 100).toFixed(0)}% concluída</p>
           </div>
@@ -598,6 +974,22 @@ export function Plano({ onNavigateTo }: { onNavigateTo: (id: string) => void }) 
     fetchBudgets().then(setBudgets).catch(() => setBudgets([]));
   }, []);
 
+  const handleGoalCreated = useCallback((goal: Goal) => {
+    setGoals((prev) => [...prev, goal]);
+  }, []);
+
+  const handleBudgetCreated = useCallback((budget: BudgetExecution) => {
+    setBudgets((prev) => {
+      const idx = prev.findIndex((b) => b.id === budget.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = budget;
+        return next;
+      }
+      return [...prev, budget];
+    });
+  }, []);
+
   if (loading) {
     return (
       <div style={{ padding: "var(--space-md)", display: "flex", justifyContent: "center", paddingTop: 48 }}>
@@ -684,7 +1076,15 @@ export function Plano({ onNavigateTo }: { onNavigateTo: (id: string) => void }) 
               <p style={{ ...sectionHeadingStyle, marginBottom: "var(--space-xs)" }}>{group.label}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
                 {group.actions.map((action) => (
-                  <ActionCard key={action.title} action={action} onNavigateTo={onNavigateTo} />
+                  <ActionCard
+                    key={action.title}
+                    action={action}
+                    goals={goals}
+                    budgets={budgets}
+                    onNavigateTo={onNavigateTo}
+                    onGoalCreated={handleGoalCreated}
+                    onBudgetCreated={handleBudgetCreated}
+                  />
                 ))}
               </div>
             </div>
