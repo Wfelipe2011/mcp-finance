@@ -28,34 +28,6 @@ Catalogar o que um **produto real** de finanças pessoais familiares tem que um 
 
 ### 🔴 Alta prioridade (bloqueia uso real por mais usuários)
 
-#### 1. Onboarding / Invite flow
-```
-Hoje: sem fluxo de convite de novos membros
-Problema: não tem como o owner adicionar alguém da família sem acesso de admin
-Solução: 
-  - Link de convite com código único (expires in 24h)
-  - Ou convite por email
-  - Novo usuário cria conta e já entra no tenant correto
-```
-
-#### 2. Notificações
-```
-Hoje: insights ficam no app, sem notificação push/email
-Problema: usuário precisa abrir o app pra ver o insight do dia
-Solução mínima: email diário/semanal com digest + insight do dia
-Solução completa: push notification (PWA) ou WhatsApp
-```
-
-#### 3. Gestão manual de transações
-```
-Hoje: tudo vem do Pluggy (automático)
-Problema: dinheiro em espécie, transferências não capturadas, ajustes
-Solução: 
-  - Form de entrada manual de transação
-  - Edição de categoria de transação existente
-  - Ocultação de transação (ruído)
-```
-
 #### 4. Metas financeiras (Goals)
 ```
 Hoje: sem metas
@@ -118,51 +90,6 @@ DaisyUI: tema dark nativo
 Quando implementar: depois da migração DaisyUI (contexto 01)
 ```
 
-#### 10. PWA (Progressive Web App)
-```
-O app é mobile-first e roda no browser
-PWA daria: ícone na tela inicial, push notifications, offline básico
-Custo: manifest.json + service worker
-Benefício: push notification (viabiliza contexto de "notificações")
-```
-
-#### 11. Compartilhamento de insights
-```
-"Esse mês eu economizei R$ 500 em alimentação" → story no Instagram
-Estilo Spotify Wrapped para finanças
-Baixo esforço, alto impacto de marketing
-```
-
-#### 12. Conexão com mais bancos / Pix
-```
-Pluggy já suporta vários bancos
-Adicionar fluxo de reconexão quando token Pluggy expira
-Categorização automática de Pix por descrição
-```
-
-#### 13. Integração com Notion / Google Sheets
-```
-Alguns usuários querem os dados no próprio Notion ou Sheets
-Export/webhook para ferramentas externas
-```
-
----
-
-## O que podemos adicionar nas changes atuais em andamento
-
-### Em fix-digest-display (já em andamento)
-- **Junto:** mostrar data/hora da última atualização do digest
-- **Junto:** botão "Gerar agora" para forçar novo digest (apenas owner)
-
-### Em daily-ml-insights / forecast-sem-ml
-- **Junto:** campo de "expectativa do usuário" na previsão
-  ("Eu acho que vou gastar menos em alimentação este mês")
-  → LLM usa essa expectativa para personalizar a mensagem
-
-### Em admin-in-app-roles
-- **Junto ao onboarding:** código de convite gerado pelo owner
-- **Junto ao settings:** remoção de conta (LGPD compliance)
-
 ---
 
 ## Questões para o explore
@@ -185,21 +112,3 @@ Export/webhook para ferramentas externas
 
 ---
 
-## Sugestão de ordem de execução
-
-```
-Agora (contextos prontos para virar change):
-  01 → UI/Navegação DaisyUI (base para tudo visual)
-  02 → Workers consolidados (simplifica infra)
-  04 → Forecast sem ML (simplifica produto)
-  03 → Admin no app + Roles (habilita onboarding)
-
-Depois (novas features):
-  A → Onboarding / Invite (depende de roles)
-  B → Orçamento por categoria (feature de alto valor)
-  C → Transações manuais (cobertura de casos de borda)
-  D → Notificações por email (retenção)
-  E → Metas financeiras (gamificação)
-  F → PWA + Push notification (mobile experience)
-  G → Dark mode (polimento visual)
-```

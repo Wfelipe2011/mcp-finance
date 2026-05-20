@@ -1,6 +1,8 @@
 
 <critical>sempre responda e gere os arquivos em pt-br</critical>
 
+<critical>Ao usar Sub Agents deve ser modo escrita sempre usando modelo Claude Sonnet 4.6 copilot</critical>
+
 ## Desenvolvimento local
 
 ### Subir o ambiente de desenvolvimento
@@ -30,3 +32,13 @@ Esse comando faz as 3 coisas em sequência:
 - Docker rodando
 - Arquivo `.env` na raiz (copiar de `.env.example` e preencher)
 - `DATABASE_URL=postgres://finance:finance@localhost:5434/finance` no `.env`
+
+
+1. remove-ml-infra          → limpa infra Python morta
+2. forecast-sql-views       → mantém tela Previsão viva (depende do 1)
+3. migrate-to-daisyui       → base visual para tudo que criar depois
+4. metas-financeiras        → primeira feature de produto
+5. orcamento-categorias     → segunda feature de produto
+6. relatorios-exportaveis   → terceira feature de produto
+7. admin-in-app-roles       → melhora UX de administração
+8. unified-priority-queue   → otimização de workers (menor urgência)
