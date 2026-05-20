@@ -35,7 +35,8 @@ export async function requireSuperAdmin(req: Request): Promise<{ valid: true } |
     const secret = getSecret();
     const { payload } = await jwtVerify(token, secret);
     const role = payload.role as string | undefined;
-    if (role !== "super_admin") return { valid: false, status: 403 };
+    // Aceita token legado de admin (role: "super_admin") ou token de tenant com role: "admin"
+    if (role !== "super_admin" && role !== "admin") return { valid: false, status: 403 };
     return { valid: true };
   } catch {
     return { valid: false, status: 401 };

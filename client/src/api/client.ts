@@ -403,3 +403,138 @@ export async function openHtmlExport(url: string): Promise<string | null> {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
   return null;
 }
+
+// ── Admin API ─────────────────────────────────────────────────────────────
+
+export interface AdminTenant {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface AdminQueueStats {
+  total: number;
+  pending: number;
+  running: number;
+  done: number;
+  error: number;
+  skipped?: number;
+}
+
+export type AdminQueueStatsByType = Record<"enrich" | "digest" | "forecast" | "dailyInsight", AdminQueueStats>;
+
+type RawAdminQueueStats = Partial<AdminQueueStats>;
+
+export interface AdminWorker {
+  id: string;
+  name: string;
+  status: string;
+  last_seen_at: string | null;
+  jobs_done: number;
+  ai_base_url: string;
+  ai_model: string;
+}
+
+export interface CreateTenantData {
+  name: string;
+  email: string;
+  password: string;
+  pluggy_email?: string;
+  pluggy_password?: string;
+}
+
+function normalizeQueueStats(stats: RawAdminQueueStats): AdminQueueStats {
+  const pending = stats.pending ?? 0;
+  const running = stats.running ?? 0;
+  const done = stats.done ?? 0;
+  const error = stats.error ?? 0;
+  const skipped = stats.skipped ?? 0;
+  return {
+    total: stats.total ?? pending + running + done + error + skipped,
+    pending,
+    running,
+    done,
+    error,
+    skipped,
+  };
+}
+
+export function adminListTenants(): Promise<AdminTenant[]> {
+  return get<AdminTenant[]>("/api/admin/tenants");
+}
+
+export async function adminToggleTenantStatus(id: string, status: string): Promise<AdminTenant> {
+  const res = await fetch(`/api/admin/tenants/${id}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<AdminTenant>;
+}
+
+export async function adminCreateTenant(data: CreateTenantData): Promise<AdminTenant> {
+  const res = await fetch("/api/admin/tenants", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+  return res.json() as Promise<AdminTenant>;
+}
+
+export async function adminQueueStats(): Promise<AdminQueueStatsByType> {
+  const [enrich, digest, forecast, dailyInsight] = await Promise.all([
+    get<RawAdminQueueStats>("/api/admin/queue-stats"),
+    get<RawAdminQueueStats>("/api/admin/digest/queue-stats"),
+    get<RawAdminQueueStats>("/api/admin/forecast/queue-stats"),
+    get<RawAdminQueueStats>("/api/admin/daily-insight/queue-stats"),
+  ]);
+  return {
+    enrich: normalizeQueueStats(enrich),
+    digest: normalizeQueueStats(digest),
+    forecast: normalizeQueueStats(forecast),
+    dailyInsight: normalizeQueueStats(dailyInsight),
+  };
+}
+
+export async function adminEnqueueDigest(tenantId?: string): Promise<void> {
+  const res = await fetch("/api/admin/digest/enqueue", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: tenantId ? JSON.stringify({ tenant_id: tenantId }) : undefined,
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+}
+
+export async function adminEnqueueEnrich(tenantId?: string): Promise<void> {
+  const res = await fetch("/api/admin/enrich/enqueue", {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: tenantId ? JSON.stringify({ tenant_id: tenantId }) : undefined,
+  });
+  if (res.status === 401) return handleUnauthorized();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error ?? res.statusText);
+  }
+}
+
+export function adminListWorkers(): Promise<AdminWorker[]> {
+  return get<AdminWorker[]>("/api/admin/workers");
+}

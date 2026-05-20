@@ -8,25 +8,41 @@ import { ProximoMes } from "./tabs/ProximoMes.tsx";
 import { Investimentos } from "./tabs/Investimentos.tsx";
 import IaScreen from "./tabs/IaScreen.tsx";
 import { Metas } from "./tabs/Metas.tsx";
+import AdminScreen from "./tabs/AdminScreen.tsx";
 import { fetchDigest, fetchMeses, triggerSync } from "./api/client.ts";
-import type { Digest } from "./api/types.ts";
+import type { Digest, JwtPayload, UserRole } from "./api/types.ts";
 import type { AppColorMode } from "./theme.ts";
 
 function isTokenValid(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return false;
-    const base64 = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(atob(base64)) as { exp?: number };
+    const payload = JSON.parse(decodeBase64Url(parts[1]!)) as { exp?: number };
     return typeof payload.exp === "number" && payload.exp > Date.now() / 1000;
   } catch {
     return false;
   }
 }
 
-type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas";
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  return atob(padded);
+}
 
-const NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
+function decodeJwtPayload(token: string): JwtPayload | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    return JSON.parse(decodeBase64Url(parts[1]!)) as JwtPayload;
+  } catch {
+    return null;
+  }
+}
+
+type TabId = "resumo" | "gastos" | "proximo-mes" | "investimentos" | "ia" | "metas" | "admin";
+
+const BASE_NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "resumo", label: "Resumo", icon: "🏠" },
   { id: "gastos", label: "Gastos", icon: "🧾" },
   { id: "proximo-mes", label: "Próx. Mês", icon: "📅" },
@@ -34,6 +50,8 @@ const NAV_ITEMS: { id: TabId; label: string; icon: string }[] = [
   { id: "metas", label: "Metas", icon: "🎯" },
   { id: "ia", label: "IA", icon: "✨" },
 ];
+
+const ADMIN_NAV_ITEM: { id: TabId; label: string; icon: string } = { id: "admin", label: "Admin", icon: "🛡️" };
 
 export function App() {
   const [authToken, setAuthToken] = useState<string | null>(
@@ -54,6 +72,15 @@ export function App() {
   const [configOpen, setConfigOpen] = useState(false);
 
   void meses;
+
+  const userRole: UserRole = authToken ? (decodeJwtPayload(authToken)?.role ?? "member") : "member";
+  const NAV_ITEMS = userRole === "admin"
+    ? [...BASE_NAV_ITEMS.slice(0, 4), ADMIN_NAV_ITEM, ...BASE_NAV_ITEMS.slice(4)]
+    : BASE_NAV_ITEMS;
+
+  useEffect(() => {
+    if (activeTab === "admin" && userRole !== "admin") setActiveTab("resumo");
+  }, [activeTab, userRole]);
 
   const handleMonthChange = (month: string) => {
     localStorage.setItem("selectedMonth", month);
@@ -137,6 +164,8 @@ export function App() {
         return <Metas />;
       case "ia":
         return <IaScreen />;
+      case "admin":
+        return userRole === "admin" ? <AdminScreen /> : null;
       default:
         return null;
     }
@@ -274,7 +303,7 @@ export function App() {
         </main>
 
         {/* Dock (mobile only) */}
-        <div className="dock lg:hidden">
+        <div className="dock app-dock lg:hidden">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}

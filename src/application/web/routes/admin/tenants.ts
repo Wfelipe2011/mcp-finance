@@ -45,8 +45,8 @@ export async function handleCreateTenant(req: Request, sql: SQL): Promise<Respon
   }
 
   const { name, email, password, pluggy_email, pluggy_password } = body;
-  if (!name || !email || !password || !pluggy_email || !pluggy_password) {
-    return errorResponse("Campos obrigatórios: name, email, password, pluggy_email, pluggy_password", 400);
+  if (!name || !email || !password) {
+    return errorResponse("Campos obrigatórios: name, email, password", 400);
   }
 
   const password_hash = await hash(password, 10);
@@ -57,8 +57,8 @@ export async function handleCreateTenant(req: Request, sql: SQL): Promise<Respon
       name,
       email,
       password_hash,
-      pluggy_email,
-      pluggy_password,
+      pluggy_email: pluggy_email?.trim() || null,
+      pluggy_password: pluggy_password?.trim() || null,
     });
     return jsonResponse(normalizeTenantResponse(tenant as unknown as Record<string, unknown>), 201);
   } catch (err: unknown) {

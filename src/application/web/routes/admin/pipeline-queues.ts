@@ -4,6 +4,22 @@ import { requireSuperAdmin } from "../../auth-middleware.ts";
 import { jsonResponse, errorResponse } from "../../helpers.ts";
 import { isDigestEligible, DIGEST_COVERAGE_MIN } from "../../../../domain/digest-policy.ts";
 
+type QueueRequestBody = { tenant_id?: unknown; month?: unknown };
+
+async function readQueueRequestBody(req: Request): Promise<QueueRequestBody> {
+  try {
+    return (await req.json()) as QueueRequestBody;
+  } catch {
+    return {};
+  }
+}
+
+async function getTargetTenantIds(db: BunPgAdapter, tenantId?: string): Promise<string[]> {
+  const activeTenantIds = await db.getActiveTenantsIds();
+  if (!tenantId) return activeTenantIds;
+  return activeTenantIds.includes(tenantId) ? [tenantId] : [];
+}
+
 // ── Digest Queue ───────────────────────────────────────────────────────────
 
 export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Response> {
@@ -11,17 +27,14 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
   if (!auth.valid) return errorResponse("Forbidden", auth.status);
 
   const rootDb = new BunPgAdapter(undefined, sql);
-  const tenantIds = await rootDb.getActiveTenantsIds();
-
+  const body = await readQueueRequestBody(req);
+  const tenantId = typeof body.tenant_id === "string" && body.tenant_id ? body.tenant_id : undefined;
+  const tenantIds = await getTargetTenantIds(rootDb, tenantId);
+  if (tenantId && tenantIds.length === 0) return errorResponse("Tenant ativo não encontrado", 404);
   let bodyMonth: { year: number; month: number } | null = null;
-  try {
-    const body = await req.json() as { month?: unknown };
-    if (typeof body?.month === "string" && /^\d{4}-\d{2}$/.test(body.month)) {
-      const [y, m] = body.month.split("-").map(Number);
-      bodyMonth = { year: y!, month: m! };
-    }
-  } catch {
-    // body ausente ou inválido — varredura completa
+  if (typeof body.month === "string" && /^\d{4}-\d{2}$/.test(body.month)) {
+    const [y, m] = body.month.split("-").map(Number);
+    bodyMonth = { year: y!, month: m! };
   }
 
   const toEnqueue: { id: string; year: number; month: number }[] = [];
@@ -74,6 +87,28 @@ export async function handleDigestEnqueue(req: Request, sql: SQL): Promise<Respo
     coverage_min: DIGEST_COVERAGE_MIN,
     months,
   });
+}
+
+export async function handleEnrichEnqueue(req: Request, sql: SQL): Promise<Response> {
+  const auth = await requireSuperAdmin(req);
+  if (!auth.valid) return errorResponse("Forbidden", auth.status);
+
+  const db = new BunPgAdapter(undefined, sql);
+  const body = await readQueueRequestBody(req);
+  const tenantId = typeof body.tenant_id === "string" && body.tenant_id ? body.tenant_id : undefined;
+  const tenantIds = await getTargetTenantIds(db, tenantId);
+  if (tenantId && tenantIds.length === 0) return errorResponse("Tenant ativo não encontrado", 404);
+
+  let enqueued = 0;
+  for (const id of tenantIds) {
+    try {
+      enqueued += await db.enrich_jobs.enqueue(id, []);
+    } catch {
+      // segue com os demais tenants
+    }
+  }
+
+  return jsonResponse({ enqueued, tenants: tenantIds.length });
 }
 
 export async function handleDigestQueueStats(req: Request, sql: SQL): Promise<Response> {

@@ -2,6 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .app-dock {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    min-height: 76px;
+    padding-inline: 2px;
+  }
+
+  .app-dock > button {
+    min-width: 0;
+    padding-inline: 2px;
+  }
+
+  .app-dock .dock-label {
+    max-width: 100%;
+    font-size: 0.625rem;
+    line-height: 1;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-tabs {
+    display: flex;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .admin-tab {
+    flex: 0 0 auto;
+    min-width: 88px;
+    height: 36px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border-hairline);
+    background: var(--color-surface-card);
+    color: var(--color-text-body);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .admin-tab[aria-selected="true"] {
+    background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-card));
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
 :root {
   color-scheme: dark;
 

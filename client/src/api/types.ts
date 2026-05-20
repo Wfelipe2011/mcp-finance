@@ -4,6 +4,15 @@ export interface User {
   display_name: string;
 }
 
+export type UserRole = "admin" | "member";
+
+export interface JwtPayload {
+  exp: number;
+  tenant_id: string;
+  tenant_name: string;
+  role: UserRole;
+}
+
 export type GoalType = 'saving' | 'spending';
 export type GoalStatus = 'active' | 'achieved' | 'abandoned';
 

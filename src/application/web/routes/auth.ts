@@ -63,7 +63,9 @@ export async function handleLogin(req: Request): Promise<Response> {
     await sql`UPDATE tenants SET last_login_at = NOW() WHERE id = ${tenant.id}`;
 
     const secret = getSecret();
-    const token = await new SignJWT({ sub: email, tenant_id: tenant.id, tenant_name: tenant.name })
+    const superAdminEmail = process.env["SUPER_ADMIN_EMAIL"];
+    const role: "admin" | "member" = superAdminEmail && email === superAdminEmail ? "admin" : "member";
+    const token = await new SignJWT({ sub: email, tenant_id: tenant.id, tenant_name: tenant.name, role })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime(`${TTL_DAYS}d`)
