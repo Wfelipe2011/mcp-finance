@@ -180,7 +180,7 @@ SELECT
   )                                                           AS compromisso_restante
 FROM (
   SELECT
-    regexp_replace(te.description, 'PARC\d+/\d+', '', 'g') AS purchase_description,
+    trim(regexp_replace(te.description, 'PARC\d+/\d+|\s+\d+/\d+$', '', 'g')) AS purchase_description,
     te.description,
     te.date AS charge_date,
     te.cc_purchase_date,
