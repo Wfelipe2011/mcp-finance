@@ -3,6 +3,10 @@ export interface LoginRequest {
   appPassword: string;
 }
 
+export interface ExternalLoginRequest extends LoginRequest {
+  customerEmail: string;
+}
+
 export interface LoginResponse {
   success: boolean;
   appSession?: string;
