@@ -88,5 +88,4 @@ export class LoginAutomationService {
       return this.waitForMagicLink(gmail, startedAt, newExecution);
     }
   }
-  }
 }
