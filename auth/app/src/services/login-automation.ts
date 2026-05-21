@@ -1,7 +1,8 @@
 import { BrowserAutomation } from '../integrations/browser';
 import { GmailReader } from '../integrations/gmail';
+import { MailSender } from '../integrations/mail-sender';
 import { getValidSession, saveSession } from '../integrations/session-store';
-import { LoginRequest } from '../types';
+import { ExternalLoginRequest, LoginRequest } from '../types';
 
 export class LoginAutomationService {
   async execute({ email, appPassword }: LoginRequest): Promise<{ success: boolean; message: string; accessToken: string }> {
@@ -15,7 +16,6 @@ export class LoginAutomationService {
     const browser = new BrowserAutomation();
     const gmail = new GmailReader(email, appPassword);
     const startedAt = new Date();
-    startedAt.setHours(startedAt.getHours() - 3);
 
     try {
       await browser.startLogin(email);
@@ -49,15 +49,22 @@ export class LoginAutomationService {
     }
   }
 
-  async externalExecute({ email, appPassword }: LoginRequest): Promise<{ success: boolean; message: string; accessToken: string }> {
+  async externalExecute({ email, appPassword, customerEmail }: ExternalLoginRequest): Promise<{ success: boolean; message: string; accessToken: string }> {
 
     const gmail = new GmailReader(email, appPassword);
     const startedAt = new Date();
-    startedAt.setHours(startedAt.getHours() - 3);
 
     const magicLink = await this.waitForMagicLink(gmail, startedAt);
 
-    return { success: true, message: 'Login realizado com sucesso', accessToken: '' };
+    const recipient = customerEmail;
+    const mailSender = new MailSender(email, appPassword);
+    await mailSender.sendMagicLink(recipient, magicLink);
+
+    return {
+      success: true,
+      message: `Magic link enviado para ${recipient}`,
+      accessToken: '',
+    };
   }
 
   private async waitForMagicLink(gmail: GmailReader, startedAt: Date, execution: string[] = []): Promise<string> {
@@ -67,7 +74,9 @@ export class LoginAutomationService {
           `[LoginAutomation] Falha ao aguardar magic link no Gmail: ${execution.join(',\n\t\t ')}`
         );
       }
-      return await gmail.waitForMagicLink(startedAt);
+      const THREE_MINUTES_IN_MS = 3 * 60 * 1000;
+      const FIFTEEN_SECONDS_IN_MS = 15 * 1000;
+      return await gmail.waitForMagicLink(startedAt, THREE_MINUTES_IN_MS, FIFTEEN_SECONDS_IN_MS);
     } catch (err) {
       const newExecution = [...execution, (err as Error).message];
       return await this.waitForMagicLink(gmail, startedAt, newExecution);

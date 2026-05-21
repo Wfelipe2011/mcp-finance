@@ -44,6 +44,16 @@ export const env = {
     pollTimeoutMs: parseInt(optional('GMAIL_POLL_TIMEOUT_MS', '30000'), 10),
   },
 
+  smtp: {
+    host: optional('SMTP_HOST', 'smtp.gmail.com'),
+    port: parseInt(optional('SMTP_PORT', '587'), 10),
+    secure: optional('SMTP_SECURE', 'false') === 'true',
+    from: optional('SMTP_FROM', ''),
+    magicLinkSubject: optional('SMTP_MAGIC_LINK_SUBJECT', 'Magic link — Meu Pluggy'),
+    // Destinatário do reenvio; vazio = usa o e-mail da requisição
+    magicLinkRecipient: optional('SMTP_MAGIC_LINK_RECIPIENT', ''),
+  },
+
   puppeteer: {
     headless: optional('PUPPETEER_HEADLESS', 'true') !== 'false',
   },

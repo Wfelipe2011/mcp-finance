@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { LoginAutomationService } from '../services/login-automation';
-import { LoginRequest, LoginResponse } from '../types';
+import { ExternalLoginRequest, LoginRequest, LoginResponse } from '../types';
 
 const automationService = new LoginAutomationService();
 
@@ -35,17 +35,17 @@ export async function externalLoginHandler(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const { email, appPassword } = req.body as Partial<LoginRequest>;
-  if (!email || !appPassword) {
+  const { email, appPassword, customerEmail } = req.body as Partial<ExternalLoginRequest>;
+  if (!email || !appPassword || !customerEmail) {
     res.status(400).json({
       success: false,
-      error: 'email e appPassword são obrigatórios',
+      error: 'email, appPassword e customerEmail são obrigatórios',
     } satisfies LoginResponse);
     return;
   }
 
   try {
-    const result = await automationService.execute({ email, appPassword });
+    const result = await automationService.externalExecute({ email, appPassword, customerEmail });
     res.status(200).json({
       success: result.success,
       message: result.message,

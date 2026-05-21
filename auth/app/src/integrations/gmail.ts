@@ -27,8 +27,8 @@ export class GmailReader {
     });
   }
 
-  async waitForMagicLink(afterTimestamp: Date): Promise<string> {
-    const deadline = Date.now() + env.gmail.pollTimeoutMs;
+  async waitForMagicLink(afterTimestamp: Date, deadlineTimeoutMs: number = env.gmail.pollTimeoutMs, pollIntervalMs: number = env.gmail.pollIntervalMs): Promise<string> {
+    const deadline = Date.now() + deadlineTimeoutMs;
     const client = this.createClient();
 
     await client.connect(); // Conecta uma única vez
@@ -39,7 +39,7 @@ export class GmailReader {
         const url = await this.fetchLatestMagicLink(afterTimestamp, client);
         if (url) return url;
 
-        await sleep(env.gmail.pollIntervalMs);
+        await sleep(pollIntervalMs);
       }
     } finally {
       await client.logout().catch(() => undefined);
