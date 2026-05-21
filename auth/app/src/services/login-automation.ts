@@ -20,14 +20,7 @@ export class LoginAutomationService {
     try {
       await browser.startLogin(email);
 
-      let magicLink: string;
-      try {
-        magicLink = await gmail.waitForMagicLink(startedAt);
-      } catch (err) {
-        throw new Error(
-          `[LoginAutomation] Falha ao aguardar magic link no Gmail: ${(err as Error).message}`
-        );
-      }
+      const magicLink = await this.waitForMagicLink(gmail, startedAt);
 
       let loginResult: { appSession: string };
       try {
@@ -53,6 +46,31 @@ export class LoginAutomationService {
       return { success: true, message: 'Login realizado com sucesso', accessToken: exchangeResult.accessToken };
     } finally {
       await browser.close();
+    }
+  }
+
+  async externalExecute({ email, appPassword }: LoginRequest): Promise<{ success: boolean; message: string; accessToken: string }> {
+
+    const gmail = new GmailReader(email, appPassword);
+    const startedAt = new Date();
+    startedAt.setHours(startedAt.getHours() - 3);
+
+    const magicLink = await this.waitForMagicLink(gmail, startedAt);
+
+    return { success: true, message: 'Login realizado com sucesso', accessToken: '' };
+  }
+
+  private async waitForMagicLink(gmail: GmailReader, startedAt: Date, execution: string[] = []): Promise<string> {
+    try {
+      if (execution?.length > 3) {
+        throw new Error(
+          `[LoginAutomation] Falha ao aguardar magic link no Gmail: ${execution.join(',\n\t\t ')}`
+        );
+      }
+      return await gmail.waitForMagicLink(startedAt);
+    } catch (err) {
+      const newExecution = [...execution, (err as Error).message];
+      return await this.waitForMagicLink(gmail, startedAt, newExecution);
     }
   }
 }
