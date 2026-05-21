@@ -67,19 +67,26 @@ export class LoginAutomationService {
     };
   }
 
-  private async waitForMagicLink(gmail: GmailReader, startedAt: Date, execution: string[] = []): Promise<string> {
+  private async waitForMagicLink(
+    gmail: GmailReader,
+    startedAt: Date,
+    execution: string[] = [],
+  ): Promise<string> {
+    const THREE_MINUTES_IN_MS = 3 * 60 * 1000;
+    const FIFTEEN_SECONDS_IN_MS = 15 * 1000;
+    const MAX_ATTEMPTS = 4;
+
     try {
-      if (execution?.length > 3) {
-        throw new Error(
-          `[LoginAutomation] Falha ao aguardar magic link no Gmail: ${execution.join(',\n\t\t ')}`
-        );
-      }
-      const THREE_MINUTES_IN_MS = 3 * 60 * 1000;
-      const FIFTEEN_SECONDS_IN_MS = 15 * 1000;
       return await gmail.waitForMagicLink(startedAt, THREE_MINUTES_IN_MS, FIFTEEN_SECONDS_IN_MS);
     } catch (err) {
       const newExecution = [...execution, (err as Error).message];
-      return await this.waitForMagicLink(gmail, startedAt, newExecution);
+      if (newExecution.length >= MAX_ATTEMPTS) {
+        throw new Error(
+          `[LoginAutomation] Falha ao aguardar magic link no Gmail: ${newExecution.join(',\n\t\t ')}`
+        );
+      }
+      return this.waitForMagicLink(gmail, startedAt, newExecution);
     }
+  }
   }
 }
