@@ -264,6 +264,7 @@ media_gastos AS (
   FROM (
     SELECT total_despesas
     FROM cube_cashflow_mensal
+    WHERE (year * 100 + month) <= (EXTRACT(YEAR FROM CURRENT_DATE)::INT * 100 + EXTRACT(MONTH FROM CURRENT_DATE)::INT)
     ORDER BY year DESC, month DESC
     LIMIT 3
   ) sub
@@ -298,6 +299,7 @@ media_gastos AS (
   FROM (
     SELECT total_despesas
     FROM cube_cashflow_mensal
+    WHERE (year * 100 + month) <= (EXTRACT(YEAR FROM CURRENT_DATE)::INT * 100 + EXTRACT(MONTH FROM CURRENT_DATE)::INT)
     ORDER BY year DESC, month DESC
     LIMIT 3
   ) sub
