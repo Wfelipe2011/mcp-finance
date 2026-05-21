@@ -109,7 +109,7 @@ CREATE OR REPLACE VIEW f_parcelas_futuras WITH (security_invoker = true) AS
 WITH parcelas_saneadas AS (
   -- Exclui parcelamentos/pagamentos/rotativos de fatura (não representam compra parcelada válida)
   SELECT
-    trim(regexp_replace(description, 'PARC\d+/\d+|\s+\d+/\d+$', '', 'g')) AS purchase_description,
+    trim(regexp_replace(description, 'PARC\d+/\d+|\s+[A-Z]?\d+/\d+$', '', 'g')) AS purchase_description,
     description,
     date_day,
     purchase_day,
